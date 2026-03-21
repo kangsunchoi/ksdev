@@ -1,0 +1,110 @@
+{
+  "theme": "dark",
+  "archetype": "Swiss & High-Contrast (adapted for Industrial IDE)",
+  "typography": {
+    "headings": "IBM Plex Sans",
+    "body": "IBM Plex Sans",
+    "monospace": "JetBrains Mono",
+    "rules": [
+      "Headings must use tight tracking (tracking-tight) and avoid generic sans defaults.",
+      "Never use Inter for headings.",
+      "Config outputs, diffs, and technical logs MUST use JetBrains Mono for perfect alignment.",
+      "Use explicit line heights (leading-none for headers, leading-relaxed for body)."
+    ]
+  },
+  "colors": {
+    "background_base": "#09090b",
+    "surface_card": "#18181b",
+    "surface_hover": "#27272a",
+    "border_default": "#27272a",
+    "border_focus": "#3b82f6",
+    "text_primary": "#f8fafc",
+    "text_secondary": "#94a3b8",
+    "text_muted": "#52525b",
+    "accent_primary": "#2563eb",
+    "accent_hover": "#1d4ed8",
+    "status": {
+      "success": "#10b981",
+      "warning": "#f59e0b",
+      "error": "#ef4444",
+      "info": "#3b82f6"
+    },
+    "diff": {
+      "added_bg": "rgba(16, 185, 129, 0.15)",
+      "added_text": "#34d399",
+      "removed_bg": "rgba(239, 68, 68, 0.15)",
+      "removed_text": "#f87171"
+    },
+    "rules": [
+      "No full-screen gradients. Color is for function and status only.",
+      "Use tinted dark grays instead of pure black for reduced eye strain.",
+      "Hover states must be explicitly defined and provide higher contrast."
+    ]
+  },
+  "visual_enhancers": {
+    "surface_strategy": "Grid Borders (The Technical Look)",
+    "borders": "1px crisp solid borders (border-border) on all containers. No soft shadows.",
+    "radius": "Minimal. Use rounded-sm (4px) or rounded-md (6px) maximum. Sharp edges preferred.",
+    "textures": "None. Prioritize stark, clean, terminal-like clarity over textures.",
+    "icons": "lucide-react (16px - 20px). Sharp, uniform stroke width. NO EMOJIS."
+  },
+  "layouts": {
+    "overall": "Sidebar navigation (w-64) with sticky top header for breadcrumbs/actions. Content area takes remaining width.",
+    "forms": "Multi-step wizard layout. Use a left-side vertical step indicator or top horizontal progress bar. Group inputs tightly using fieldsets.",
+    "output_viewer": "Full-height container utilizing tabs for the 4 generated outputs (Clean, Annotated, Validation, Checklist).",
+    "diff_viewer": "Side-by-side grid split (grid-cols-2). Synchronized scrolling if possible. Monospace rendering mandatory.",
+    "spacing": "Dense. Use p-4 for cards, gap-4 for grids. Reduce standard Shadcn input heights from h-10 to h-8 for high-density forms."
+  },
+  "grids": {
+    "type": "Mode B: High Density Grid",
+    "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-4.",
+    "forms": "grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 to pack multiple configuration parameters efficiently.",
+    "rules": "Every pixel must be utilized. Use border-collapse patterns where applicable."
+  },
+  "component_rules": {
+    "cards": "Flat solid background. 1px subtle border. No shadows. Use for project lists and dashboard stats.",
+    "inputs": "Use Shadcn Input, Select, Checkbox. Customize to be denser (h-8). Clear focus states (ring-1 ring-blue-500).",
+    "buttons": "Rectangular, dense. Primary actions use accent_primary. Secondary actions use surface_card with border.",
+    "tabs": "Override default Shadcn tabs to have a sharp, terminal-like underline indicator or solid active state without rounded corners.",
+    "tables": "Dense rows (py-2). Zebra striping optional but recommended for large datasets. Fixed headers for scrolling."
+  },
+  "motion": {
+    "philosophy": "Utilitarian and instant. Network engineers hate waiting for animations.",
+    "transitions": "Extremely fast (duration-75 or duration-100) on hover states and color changes.",
+    "entrance": "None or minimal fade-in for page loads. No bouncy spring animations."
+  },
+  "accessibility": {
+    "contrast": "Ensure all text meets minimum 4.5:1 ratio against dark backgrounds. Use text-white over accent colors.",
+    "focus": "Aggressive, high-contrast focus rings (focus:ring-2 focus:ring-blue-500 focus:outline-none) on all inputs.",
+    "data_testid": "MANDATORY on all buttons, form inputs, tabs, and output copy buttons.",
+    "color_blindness": "Use icons alongside status colors (e.g., TriangleAlert icon for warnings, CircleX for errors)."
+  },
+  "media": {
+    "strategy": "No images, avatars, or illustrations. Purely data, forms, and code blocks."
+  },
+  "3d_libraries": {
+    "strategy": "None. 2D highly functional technical layout."
+  },
+  "image_urls": [],
+  "instructions_to_main_agent": {
+    "1": "Implement the layout using a strict dark theme. DO NOT add a light mode toggle; this is a mandatory dark theme application.",
+    "2": "Build a robust multi-step form for the 'New Configuration Project'. Ensure form state is managed cleanly across steps.",
+    "3": "For the Diff Viewer, implement a side-by-side layout comparing two text blocks. Use JetBrains Mono. Highlight added lines with green-500/15 background and removed lines with red-500/15 background.",
+    "4": "The Generated Output section must feature a code-editor-like feel. Add a persistent 'Copy to Clipboard' button on the top right of the output container.",
+    "5": "Do not build a consumer SaaS. Build an industrial tool. Spacing should be tight, information dense, and layout rigid.",
+    "6": "Use only lucide-react for icons. Do not use standard HTML selects; use Shadcn Select customized for dense layouts.",
+    "7": "Ensure JSON/YAML import functionality has a clear drag-and-drop or text-area zone."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make the frontend look like a highly specialized, custom-built Cisco engineering tool.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Create depth through 1px borders and slight background color variations, NOT shadows.",
+    "You MUST NOT apply universal transition (e.g., transition: all). Add transitions ONLY for specific properties.",
+    "You MUST NOT center align the app container. Align to the top-left to mimic technical IDEs.",
+    "Always use dense, sharp button styles rather than pill-shaped bouncy buttons.",
+    "NEVER use emojis for icons.",
+    "Prioritize pre-existing components from src/components/ui.",
+    "Components MUST use named exports; Pages MUST use default exports.",
+    "Use sonner for toast notifications."
+  ]
+}
