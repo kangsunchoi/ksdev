@@ -252,14 +252,16 @@ export default function NewProject() {
       </div>
 
       {/* Navigation */}
-      <div className="h-12 border-t border-border flex items-center justify-between px-6 shrink-0 bg-card/50">
+      <div className="h-14 border-t border-border flex items-center justify-between px-6 shrink-0 bg-card/50 relative z-50">
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0} data-testid="prev-step-btn">
           <ChevronLeft className="w-3.5 h-3.5 mr-1" /> Previous
         </Button>
         <span className="text-xs text-zinc-500">Step {step + 1} of {steps.length}</span>
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setStep(s => Math.min(steps.length - 1, s + 1))} disabled={step === steps.length - 1} data-testid="next-step-btn">
-          Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
-        </Button>
+        <div className="flex gap-2 items-center mr-32">
+          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setStep(s => Math.min(steps.length - 1, s + 1))} disabled={step === steps.length - 1} data-testid="next-step-btn">
+            Next <ChevronRight className="w-3.5 h-3.5 ml-1" />
+          </Button>
+        </div>
       </div>
     </div>
   );

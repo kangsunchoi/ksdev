@@ -137,7 +137,7 @@ export default function ProjectDetail() {
             {platformLabels[project.device?.platform_family]} | {project.device?.hostname}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mr-32 relative z-50">
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(`/projects/${id}/edit`)} data-testid="edit-project-btn">
             <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
           </Button>
