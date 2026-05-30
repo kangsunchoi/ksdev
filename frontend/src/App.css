@@ -1,34 +1,117 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* NetConfig Builder - Engineering Tool Styles */
+
+/* Dense input overrides for high-density forms */
+.ncb-input {
+  @apply h-8 text-sm bg-transparent;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.ncb-select-trigger {
+  @apply h-8 text-sm;
 }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+/* Config output display */
+.config-output {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 2;
+  color: #e2e8f0;
+  background: hsl(240 6% 6%);
+  border: 1px solid hsl(240 4% 16%);
+  border-radius: 4px;
+  padding: 16px;
+  overflow-x: auto;
 }
 
-.App-link {
-    color: #61dafb;
+.config-output .comment {
+  color: #6b7280;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.config-output .annotation {
+  color: #60a5fa;
 }
+
+/* Diff viewer */
+.diff-added {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+
+.diff-removed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+}
+
+.diff-line {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 0 8px;
+  white-space: pre;
+}
+
+/* Severity badges */
+.severity-error {
+  @apply bg-red-500/15 text-red-400 border-red-500/30;
+}
+
+.severity-warning {
+  @apply bg-amber-500/15 text-amber-400 border-amber-500/30;
+}
+
+.severity-info {
+  @apply bg-blue-500/15 text-blue-400 border-blue-500/30;
+}
+
+/* Step indicator */
+.step-item {
+  @apply flex items-center gap-2 text-sm;
+}
+
+.step-item.active .step-number {
+  @apply bg-blue-600 text-white;
+}
+
+.step-item.completed .step-number {
+  @apply bg-emerald-600 text-white;
+}
+
+.step-item .step-number {
+  @apply w-6 h-6 rounded flex items-center justify-center text-xs font-medium bg-zinc-800 text-zinc-500;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(240 6% 6%);
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(240 4% 20%);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 4% 28%);
+}
+
+/* Table dense styling */
+.dense-table th,
+.dense-table td {
+  @apply py-2 px-3 text-sm;
+}
+
+/* Transition overrides - specific properties only */
+.btn-transition {
+  transition: background-color 75ms ease, border-color 75ms ease;
+}
+
+/* Status indicators */
+.status-draft { @apply text-zinc-400; }
+.status-validated { @apply text-amber-400; }
+.status-generated { @apply text-emerald-400; }
