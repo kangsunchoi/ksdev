@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -36,6 +36,12 @@ const OS_VERSIONS = ["17.3", "17.6", "17.9", "17.12"];
 
 const INDUSTRIAL_PLATFORMS = ["ie3300", "ie3400", "ie9320"];
 
+const INDUSTRIAL_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "industrial");
+const CAMPUS_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "campus");
+const WIRELESS_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "wireless");
+
+const uid = () => Math.random().toString(36).slice(2, 10);
+
 const defaultForm = () => ({
   name: "",
   device: { role: "access_switch", vendor: "cisco", platform_family: "", os_family: "ios_xe", os_version: "17.9", hostname: "" },
@@ -65,8 +71,12 @@ export default function NewProject() {
   ];
 
   useEffect(() => {
-    if (id) {
-      api.getProject(id).then(res => {
+    if (!id) return;
+    let cancelled = false;
+    const loadProject = async () => {
+      try {
+        const res = await api.getProject(id);
+        if (cancelled) return;
         const p = res.data;
         const merged = defaultForm();
         Object.keys(merged).forEach(k => {
@@ -78,14 +88,25 @@ export default function NewProject() {
             }
           }
         });
+        // Ensure _uid on all array items for stable React keys
+        const ensureUids = (arr) => arr.map(item => item._uid ? item : { ...item, _uid: uid() });
+        merged.vlans = ensureUids(merged.vlans);
+        merged.interfaces.access_ports = ensureUids(merged.interfaces.access_ports);
+        merged.interfaces.trunk_ports = ensureUids(merged.interfaces.trunk_ports);
+        merged.interfaces.port_channels = ensureUids(merged.interfaces.port_channels);
+        merged.routing.svi_list = ensureUids(merged.routing.svi_list);
+        merged.routing.static_routes = ensureUids(merged.routing.static_routes);
+        merged.security.local_users = ensureUids(merged.security.local_users);
         if (merged.management.dns_servers.length === 0) merged.management.dns_servers = [""];
         if (merged.services.ntp_servers.length === 0) merged.services.ntp_servers = [""];
         if (merged.services.syslog_servers.length === 0) merged.services.syslog_servers = [""];
-        if (merged.security.local_users.length === 0) merged.security.local_users = [{ username: "", privilege: 15, secret_type: "9" }];
+        if (merged.security.local_users.length === 0) merged.security.local_users = [{ username: "", privilege: 15, secret_type: "9", _uid: uid() }];
         setForm(merged);
         setLoaded(true);
-      }).catch(() => { toast.error("Failed to load project"); navigate("/"); });
-    }
+      } catch { if (!cancelled) { toast.error("Failed to load project"); navigate("/"); } }
+    };
+    loadProject();
+    return () => { cancelled = true; };
   }, [id, navigate]);
 
   const upd = useCallback((path, value) => {
@@ -117,7 +138,7 @@ export default function NewProject() {
       const keys = path.split(".");
       let obj = next;
       for (const k of keys) obj = obj[k];
-      obj.push({ ...templates[path] });
+      obj.push({ ...templates[path], _uid: uid() });
       return next;
     });
   };
@@ -283,11 +304,11 @@ function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray }) {
             </SelectTrigger>
             <SelectContent>
               <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase">Industrial</div>
-              {PLATFORMS.filter(p => p.cat === "industrial").map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+              {INDUSTRIAL_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
               <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase mt-1">Campus</div>
-              {PLATFORMS.filter(p => p.cat === "campus").map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+              {CAMPUS_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
               <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase mt-1">Wireless</div>
-              {PLATFORMS.filter(p => p.cat === "wireless").map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+              {WIRELESS_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </F>
@@ -370,7 +391,7 @@ function StepVlans({ form, addToArray, removeFromArray, updateArrayItem, F }) {
       </div>
       {form.vlans.length === 0 && <div className="text-sm text-zinc-600 py-4 text-center border border-dashed border-border rounded-sm">No VLANs defined. Click "Add VLAN" to start.</div>}
       {form.vlans.map((vlan, i) => (
-        <div key={i} className="grid grid-cols-[80px_1fr_1fr_32px] gap-2 items-end" data-testid={`vlan-row-${i}`}>
+        <div key={vlan._uid || `v-${i}`} className="grid grid-cols-[80px_1fr_1fr_32px] gap-2 items-end" data-testid={`vlan-row-${i}`}>
           <F label={i === 0 ? "ID" : ""}>
             <Input className="ncb-input font-mono" value={vlan.id} onChange={e => updateArrayItem("vlans", i, "id", e.target.value)} placeholder="10" data-testid={`vlan-id-${i}`} />
           </F>
@@ -401,7 +422,7 @@ function StepInterfaces({ form, addToArray, removeFromArray, updateArrayItem, F 
           </Button>
         </div>
         {form.interfaces.access_ports.map((p, i) => (
-          <div key={i} className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`access-port-${i}`}>
+          <div key={p._uid || `ap-${i}`} className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`access-port-${i}`}>
             <F label={i === 0 ? "Interface" : ""}>
               <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.access_ports", i, "interface", e.target.value)} placeholder="Gi1/0/1" />
             </F>
@@ -431,7 +452,7 @@ function StepInterfaces({ form, addToArray, removeFromArray, updateArrayItem, F 
           </Button>
         </div>
         {form.interfaces.trunk_ports.map((p, i) => (
-          <div key={i} className="grid grid-cols-[1fr_1fr_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`trunk-port-${i}`}>
+          <div key={p._uid || `tp-${i}`} className="grid grid-cols-[1fr_1fr_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`trunk-port-${i}`}>
             <F label={i === 0 ? "Interface" : ""}>
               <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.trunk_ports", i, "interface", e.target.value)} placeholder="Gi1/0/48" />
             </F>
@@ -461,7 +482,7 @@ function StepInterfaces({ form, addToArray, removeFromArray, updateArrayItem, F 
           </Button>
         </div>
         {form.interfaces.port_channels.map((pc, i) => (
-          <div key={i} className="border border-border rounded-sm p-3 mb-2 space-y-2" data-testid={`port-channel-${i}`}>
+          <div key={pc._uid || `pc-${i}`} className="border border-border rounded-sm p-3 mb-2 space-y-2" data-testid={`port-channel-${i}`}>
             <div className="flex justify-between">
               <span className="text-xs text-zinc-400">Port-Channel {pc.id || "?"}</span>
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("interfaces.port_channels", i)}>
@@ -536,7 +557,7 @@ function StepRoutingServices({ form, upd, F, addToArray, removeFromArray, update
           </Button>
         </div>
         {form.routing.svi_list.map((svi, i) => (
-          <div key={i} className="grid grid-cols-[80px_1fr_1fr_1fr_32px] gap-2 items-end mb-2">
+          <div key={svi._uid || `svi-${i}`} className="grid grid-cols-[80px_1fr_1fr_1fr_32px] gap-2 items-end mb-2">
             <F label={i === 0 ? "VLAN" : ""}>
               <Input className="ncb-input font-mono" value={svi.vlan} onChange={e => updateArrayItem("routing.svi_list", i, "vlan", e.target.value)} placeholder="10" />
             </F>
@@ -566,7 +587,7 @@ function StepRoutingServices({ form, upd, F, addToArray, removeFromArray, update
           </Button>
         </div>
         {form.routing.static_routes.map((r, i) => (
-          <div key={i} className="grid grid-cols-[1fr_1fr_1fr_32px] gap-2 items-end mb-2">
+          <div key={r._uid || `rt-${i}`} className="grid grid-cols-[1fr_1fr_1fr_32px] gap-2 items-end mb-2">
             <F label={i === 0 ? "Network" : ""}>
               <Input className="ncb-input font-mono" value={r.network} onChange={e => updateArrayItem("routing.static_routes", i, "network", e.target.value)} placeholder="0.0.0.0" />
             </F>
@@ -675,7 +696,7 @@ function StepSecurity({ form, upd, F, addToArray, removeFromArray, updateArrayIt
       <div>
         <h3 className="text-sm font-medium text-zinc-300 mb-3">Local User Accounts</h3>
         {form.security.local_users.map((u, i) => (
-          <div key={i} className="grid grid-cols-[1fr_80px_32px] gap-2 items-end mb-2" data-testid={`user-row-${i}`}>
+          <div key={u._uid || `usr-${i}`} className="grid grid-cols-[1fr_80px_32px] gap-2 items-end mb-2" data-testid={`user-row-${i}`}>
             <F label={i === 0 ? "Username" : ""}>
               <Input className="ncb-input font-mono" value={u.username} onChange={e => updateArrayItem("security.local_users", i, "username", e.target.value)} placeholder="admin" />
             </F>
@@ -819,6 +840,10 @@ function StepIndustrial({ form, upd, F }) {
 
 function StepReview({ form }) {
   const platLabel = PLATFORMS.find(p => p.value === form.device.platform_family)?.label || form.device.platform_family;
+  const roleLabel = useMemo(() => ROLES.find(r => r.value === form.device.role)?.label, [form.device.role]);
+  const dnsStr = useMemo(() => form.management.dns_servers.filter(Boolean).join(", "), [form.management.dns_servers]);
+  const ntpCount = useMemo(() => form.services.ntp_servers.filter(Boolean).length, [form.services.ntp_servers]);
+  const syslogCount = useMemo(() => form.services.syslog_servers.filter(Boolean).length, [form.services.syslog_servers]);
   return (
     <div className="space-y-4">
       <div className="text-xs text-zinc-500 mb-2">Review your configuration before saving. You can validate and generate after saving.</div>
@@ -828,20 +853,20 @@ function StepReview({ form }) {
           <ReviewRow label="Platform" value={platLabel} />
           <ReviewRow label="OS" value={`IOS-XE ${form.device.os_version}`} />
           <ReviewRow label="Hostname" value={form.device.hostname} mono />
-          <ReviewRow label="Role" value={ROLES.find(r => r.value === form.device.role)?.label} />
+          <ReviewRow label="Role" value={roleLabel} />
         </ReviewSection>
         <ReviewSection title="Management">
           <ReviewRow label="VLAN" value={form.management.mgmt_vlan} mono />
           <ReviewRow label="IP" value={`${form.management.mgmt_ip} / ${form.management.mgmt_mask}`} mono />
           <ReviewRow label="Gateway" value={form.management.default_gateway} mono />
-          <ReviewRow label="DNS" value={form.management.dns_servers.filter(Boolean).join(", ")} mono />
+          <ReviewRow label="DNS" value={dnsStr} mono />
           <ReviewRow label="Domain" value={form.management.domain_name} mono />
         </ReviewSection>
       </div>
       <div className="grid grid-cols-3 gap-4 text-sm">
         <ReviewSection title="VLANs">
           {form.vlans.length === 0 ? <span className="text-zinc-600 text-xs">None</span> :
-            form.vlans.map((v, i) => <div key={i} className="text-xs font-mono text-zinc-400">VLAN {v.id}: {v.name}</div>)}
+            form.vlans.map((v) => <div key={v._uid || v.id || Math.random()} className="text-xs font-mono text-zinc-400">VLAN {v.id}: {v.name}</div>)}
         </ReviewSection>
         <ReviewSection title="Interfaces">
           <div className="text-xs text-zinc-400">Access: {form.interfaces.access_ports.length}</div>
@@ -849,8 +874,8 @@ function StepReview({ form }) {
           <div className="text-xs text-zinc-400">Port-Ch: {form.interfaces.port_channels.length}</div>
         </ReviewSection>
         <ReviewSection title="Services">
-          <div className="text-xs text-zinc-400">NTP: {form.services.ntp_servers.filter(Boolean).length} server(s)</div>
-          <div className="text-xs text-zinc-400">Syslog: {form.services.syslog_servers.filter(Boolean).length} server(s)</div>
+          <div className="text-xs text-zinc-400">NTP: {ntpCount} server(s)</div>
+          <div className="text-xs text-zinc-400">Syslog: {syslogCount} server(s)</div>
           <div className="text-xs text-zinc-400">SNMP: {form.services.snmp.version || "not set"}</div>
         </ReviewSection>
       </div>

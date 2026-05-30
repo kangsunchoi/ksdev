@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -26,20 +26,20 @@ export default function TemplateLibrary() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       setLoading(true);
       const params = filter !== "all" ? { platform: filter } : {};
       const res = await api.listTemplates(params);
       setTemplates(res.data);
-    } catch (e) {
+    } catch {
       toast.error("Failed to load templates");
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
-  useEffect(() => { fetchTemplates(); }, [filter]);
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
   const handleDuplicate = async (id) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -32,20 +32,20 @@ export default function ProjectDetail() {
   const [generating, setGenerating] = useState(false);
   const [tab, setTab] = useState("clean");
 
-  const fetchProject = async () => {
+  const fetchProject = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.getProject(id);
       setProject(res.data);
-    } catch (e) {
+    } catch {
       toast.error("Failed to load project");
       navigate("/");
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, navigate]);
 
-  useEffect(() => { fetchProject(); }, [id]);
+  useEffect(() => { fetchProject(); }, [fetchProject]);
 
   const handleValidate = async () => {
     setValidating(true);
@@ -126,160 +126,198 @@ export default function ProjectDetail() {
 
   return (
     <div className="flex flex-col h-full" data-testid="project-detail">
-      {/* Header */}
-      <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-sm font-semibold text-zinc-200">{project.name || "Unnamed Project"}</h1>
-          <Badge className={`text-[10px] px-1.5 py-0 ${statusMap[project.status]?.class || statusMap.draft.class}`}>
-            {statusMap[project.status]?.label || "Draft"}
-          </Badge>
-          <span className="text-xs text-zinc-500 font-mono">
-            {platformLabels[project.device?.platform_family]} | {project.device?.hostname}
-          </span>
-        </div>
-        <div className="flex gap-2 mr-32 relative z-50">
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(`/projects/${id}/edit`)} data-testid="edit-project-btn">
-            <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleValidate} disabled={validating} data-testid="validate-btn">
-            {validating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5 mr-1" />}
-            Validate
-          </Button>
-          <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={handleGenerate} disabled={generating} data-testid="generate-btn">
-            {generating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1" />}
-            Generate
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs text-red-400 hover:text-red-300 hover:border-red-400/50" onClick={handleDelete} data-testid="delete-project-btn">
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
+      <ProjectHeader project={project} navigate={navigate} id={id}
+        onValidate={handleValidate} validating={validating}
+        onGenerate={handleGenerate} generating={generating}
+        onDelete={handleDelete} />
 
-      {/* Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col overflow-hidden">
-            <div className="border-b border-border px-6 pt-2">
-              <TabsList className="bg-transparent h-8 p-0 gap-0">
-                <TabsTrigger value="clean" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-clean">
-                  Clean Config
-                </TabsTrigger>
-                <TabsTrigger value="annotated" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-annotated">
-                  Annotated
-                </TabsTrigger>
-                <TabsTrigger value="validation" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-validation">
-                  Validation {findings.length > 0 && <span className="ml-1 text-[10px]">({findings.length})</span>}
-                </TabsTrigger>
-                <TabsTrigger value="checklist" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-checklist">
-                  Checklist
-                </TabsTrigger>
-                <TabsTrigger value="export" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-export">
-                  Export
-                </TabsTrigger>
-              </TabsList>
-            </div>
+            <TabBar tab={tab} findingsCount={findings.length} />
 
-            <TabsContent value="clean" className="flex-1 overflow-hidden m-0">
-              {config?.clean_config ? (
-                <div className="relative h-full">
-                  <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.clean_config)} data-testid="copy-clean-config-btn">
-                    <Copy className="w-3 h-3 mr-1" /> Copy
-                  </Button>
-                  <ScrollArea className="h-full">
-                    <pre className="config-output m-4 min-h-full" data-testid="clean-config-output">{config.clean_config}</pre>
-                  </ScrollArea>
-                </div>
-              ) : (
-                <EmptyState message="No config generated yet. Click 'Generate' to create configuration." />
-              )}
-            </TabsContent>
-
-            <TabsContent value="annotated" className="flex-1 overflow-hidden m-0">
-              {config?.annotated_config ? (
-                <div className="relative h-full">
-                  <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.annotated_config)} data-testid="copy-annotated-btn">
-                    <Copy className="w-3 h-3 mr-1" /> Copy
-                  </Button>
-                  <ScrollArea className="h-full">
-                    <pre className="config-output m-4 min-h-full" data-testid="annotated-config-output">
-                      {config.annotated_config.split("\n").map((line, i) => (
-                        <span key={i} className={line.startsWith("! >>") ? "text-blue-400" : line.startsWith("!") ? "text-zinc-600" : ""}>
-                          {line}{"\n"}
-                        </span>
-                      ))}
-                    </pre>
-                  </ScrollArea>
-                </div>
-              ) : (
-                <EmptyState message="No annotated config available. Generate config first." />
-              )}
-            </TabsContent>
-
-            <TabsContent value="validation" className="flex-1 overflow-hidden m-0">
-              <ScrollArea className="h-full">
-                <div className="p-4 space-y-2" data-testid="validation-results">
-                  {findings.length === 0 ? (
-                    <EmptyState message="No validation results. Click 'Validate' to check your configuration." />
-                  ) : (
-                    <>
-                      <div className="flex gap-3 mb-4 text-xs">
-                        <span className="text-red-400">{errors.length} error(s)</span>
-                        <span className="text-amber-400">{warnings.length} warning(s)</span>
-                        <span className="text-blue-400">{infos.length} info(s)</span>
-                      </div>
-                      {findings.map((f, i) => (
-                        <FindingRow key={i} finding={f} />
-                      ))}
-                    </>
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="checklist" className="flex-1 overflow-hidden m-0">
-              <ScrollArea className="h-full">
-                <div className="p-4 space-y-2" data-testid="checklist-output">
-                  {config?.checklist?.length > 0 ? (
-                    config.checklist.map((c, i) => (
-                      <div key={i} className="flex gap-3 p-2 border border-border rounded-sm text-sm" data-testid={`checklist-item-${i}`}>
-                        <div className="shrink-0 mt-0.5">
-                          {c.type === "action_required" ? (
-                            <AlertTriangle className="w-4 h-4 text-amber-400" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                          )}
-                        </div>
-                        <div>
-                          <div className="text-xs text-zinc-500 font-medium">{c.section}</div>
-                          <div className="text-sm text-zinc-300">{c.item}</div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <EmptyState message="No checklist available. Generate config first." />
-                  )}
-                </div>
-              </ScrollArea>
-            </TabsContent>
-
-            <TabsContent value="export" className="flex-1 overflow-hidden m-0">
-              <div className="p-6 space-y-4" data-testid="export-panel">
-                <h3 className="text-sm font-medium text-zinc-300">Export Project</h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <ExportCard icon={FileText} label="Clean Config (TXT)" desc="CLI commands only, ready for paste" format="txt" onClick={handleExport} disabled={!config} />
-                  <ExportCard icon={FileJson} label="Project (JSON)" desc="Full project data with all settings" format="json" onClick={handleExport} />
-                  <ExportCard icon={FileCode} label="Project (YAML)" desc="Full project data in YAML format" format="yaml" onClick={handleExport} />
-                </div>
-                <div className="text-xs text-zinc-600 mt-4">
-                  DOCX and PDF export will be available in a future release.
-                </div>
-              </div>
-            </TabsContent>
+            <CleanConfigTab config={config} copyToClipboard={copyToClipboard} />
+            <AnnotatedConfigTab config={config} copyToClipboard={copyToClipboard} />
+            <ValidationTab findings={findings} errors={errors} warnings={warnings} infos={infos} />
+            <ChecklistTab config={config} />
+            <ExportTab config={config} onExport={handleExport} />
           </Tabs>
         </div>
       </div>
     </div>
+  );
+}
+
+function ProjectHeader({ project, navigate, id, onValidate, validating, onGenerate, generating, onDelete }) {
+  return (
+    <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0">
+      <div className="flex items-center gap-3">
+        <h1 className="text-sm font-semibold text-zinc-200">{project.name || "Unnamed Project"}</h1>
+        <Badge className={`text-[10px] px-1.5 py-0 ${statusMap[project.status]?.class || statusMap.draft.class}`}>
+          {statusMap[project.status]?.label || "Draft"}
+        </Badge>
+        <span className="text-xs text-zinc-500 font-mono">
+          {platformLabels[project.device?.platform_family]} | {project.device?.hostname}
+        </span>
+      </div>
+      <div className="flex gap-2 mr-32 relative z-50">
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(`/projects/${id}/edit`)} data-testid="edit-project-btn">
+          <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onValidate} disabled={validating} data-testid="validate-btn">
+          {validating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5 mr-1" />}
+          Validate
+        </Button>
+        <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={onGenerate} disabled={generating} data-testid="generate-btn">
+          {generating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1" />}
+          Generate
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 text-xs text-red-400 hover:text-red-300 hover:border-red-400/50" onClick={onDelete} data-testid="delete-project-btn">
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function TabBar({ findingsCount }) {
+  return (
+    <div className="border-b border-border px-6 pt-2">
+      <TabsList className="bg-transparent h-8 p-0 gap-0">
+        <TabsTrigger value="clean" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-clean">
+          Clean Config
+        </TabsTrigger>
+        <TabsTrigger value="annotated" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-annotated">
+          Annotated
+        </TabsTrigger>
+        <TabsTrigger value="validation" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-validation">
+          Validation {findingsCount > 0 && <span className="ml-1 text-[10px]">({findingsCount})</span>}
+        </TabsTrigger>
+        <TabsTrigger value="checklist" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-checklist">
+          Checklist
+        </TabsTrigger>
+        <TabsTrigger value="export" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-export">
+          Export
+        </TabsTrigger>
+      </TabsList>
+    </div>
+  );
+}
+
+function CleanConfigTab({ config, copyToClipboard }) {
+  return (
+    <TabsContent value="clean" className="flex-1 overflow-hidden m-0">
+      {config?.clean_config ? (
+        <div className="relative h-full">
+          <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.clean_config)} data-testid="copy-clean-config-btn">
+            <Copy className="w-3 h-3 mr-1" /> Copy
+          </Button>
+          <ScrollArea className="h-full">
+            <pre className="config-output m-4 min-h-full" data-testid="clean-config-output">{config.clean_config}</pre>
+          </ScrollArea>
+        </div>
+      ) : (
+        <EmptyState message="No config generated yet. Click 'Generate' to create configuration." />
+      )}
+    </TabsContent>
+  );
+}
+
+function AnnotatedConfigTab({ config, copyToClipboard }) {
+  return (
+    <TabsContent value="annotated" className="flex-1 overflow-hidden m-0">
+      {config?.annotated_config ? (
+        <div className="relative h-full">
+          <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.annotated_config)} data-testid="copy-annotated-btn">
+            <Copy className="w-3 h-3 mr-1" /> Copy
+          </Button>
+          <ScrollArea className="h-full">
+            <pre className="config-output m-4 min-h-full" data-testid="annotated-config-output">
+              {config.annotated_config.split("\n").map((line, i) => (
+                <span key={i} className={line.startsWith("! >>") ? "text-blue-400" : line.startsWith("!") ? "text-zinc-600" : ""}>
+                  {line}{"\n"}
+                </span>
+              ))}
+            </pre>
+          </ScrollArea>
+        </div>
+      ) : (
+        <EmptyState message="No annotated config available. Generate config first." />
+      )}
+    </TabsContent>
+  );
+}
+
+function ValidationTab({ findings, errors, warnings, infos }) {
+  return (
+    <TabsContent value="validation" className="flex-1 overflow-hidden m-0">
+      <ScrollArea className="h-full">
+        <div className="p-4 space-y-2" data-testid="validation-results">
+          {findings.length === 0 ? (
+            <EmptyState message="No validation results. Click 'Validate' to check your configuration." />
+          ) : (
+            <>
+              <div className="flex gap-3 mb-4 text-xs">
+                <span className="text-red-400">{errors.length} error(s)</span>
+                <span className="text-amber-400">{warnings.length} warning(s)</span>
+                <span className="text-blue-400">{infos.length} info(s)</span>
+              </div>
+              {findings.map((f, i) => (
+                <FindingRow key={`${f.severity}-${f.field}-${i}`} finding={f} />
+              ))}
+            </>
+          )}
+        </div>
+      </ScrollArea>
+    </TabsContent>
+  );
+}
+
+function ChecklistTab({ config }) {
+  return (
+    <TabsContent value="checklist" className="flex-1 overflow-hidden m-0">
+      <ScrollArea className="h-full">
+        <div className="p-4 space-y-2" data-testid="checklist-output">
+          {config?.checklist?.length > 0 ? (
+            config.checklist.map((c, i) => (
+              <div key={`${c.section}-${c.type}-${i}`} className="flex gap-3 p-2 border border-border rounded-sm text-sm" data-testid={`checklist-item-${i}`}>
+                <div className="shrink-0 mt-0.5">
+                  {c.type === "action_required" ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs text-zinc-500 font-medium">{c.section}</div>
+                  <div className="text-sm text-zinc-300">{c.item}</div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <EmptyState message="No checklist available. Generate config first." />
+          )}
+        </div>
+      </ScrollArea>
+    </TabsContent>
+  );
+}
+
+function ExportTab({ config, onExport }) {
+  return (
+    <TabsContent value="export" className="flex-1 overflow-hidden m-0">
+      <div className="p-6 space-y-4" data-testid="export-panel">
+        <h3 className="text-sm font-medium text-zinc-300">Export Project</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <ExportCard icon={FileText} label="Clean Config (TXT)" desc="CLI commands only, ready for paste" format="txt" onClick={onExport} disabled={!config} />
+          <ExportCard icon={FileJson} label="Project (JSON)" desc="Full project data with all settings" format="json" onClick={onExport} />
+          <ExportCard icon={FileCode} label="Project (YAML)" desc="Full project data in YAML format" format="yaml" onClick={onExport} />
+        </div>
+        <div className="text-xs text-zinc-600 mt-4">
+          DOCX and PDF export will be available in a future release.
+        </div>
+      </div>
+    </TabsContent>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
@@ -24,19 +24,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.getStats();
       setStats(res.data);
-    } catch (e) {
-      console.error("Failed to fetch stats:", e);
+    } catch {
+      // stats load failed
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   if (loading) {
     return (

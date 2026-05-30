@@ -185,9 +185,15 @@ def _validate_interfaces(interfaces: dict, vlans: list, platform: str) -> list:
             pass
 
     all_intf_names = set()
+    findings.extend(_validate_access_ports(interfaces.get("access_ports", []), vlan_ids, all_intf_names))
+    findings.extend(_validate_trunk_ports(interfaces.get("trunk_ports", []), all_intf_names))
+    findings.extend(_validate_port_channels(interfaces.get("port_channels", []), all_intf_names))
+    return findings
 
-    # Access ports
-    for i, port in enumerate(interfaces.get("access_ports", [])):
+
+def _validate_access_ports(ports: list, vlan_ids: set, all_intf_names: set) -> list:
+    findings = []
+    for i, port in enumerate(ports):
         intf = port.get("interface", "").strip()
         if not intf:
             findings.append({"severity": "error", "field": f"interfaces.access_ports[{i}].interface", "message": "Interface name is required."})
@@ -209,9 +215,12 @@ def _validate_interfaces(interfaces: dict, vlans: list, platform: str) -> list:
         if not port.get("description"):
             findings.append({"severity": "info", "field": f"interfaces.access_ports[{i}].description",
                              "message": f"No description on {intf or f'access port {i}'}. Descriptions are recommended."})
+    return findings
 
-    # Trunk ports
-    for i, port in enumerate(interfaces.get("trunk_ports", [])):
+
+def _validate_trunk_ports(ports: list, all_intf_names: set) -> list:
+    findings = []
+    for i, port in enumerate(ports):
         intf = port.get("interface", "").strip()
         if not intf:
             findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{i}].interface", "message": "Interface name is required."})
@@ -240,9 +249,12 @@ def _validate_interfaces(interfaces: dict, vlans: list, platform: str) -> list:
         if not port.get("description"):
             findings.append({"severity": "info", "field": f"interfaces.trunk_ports[{i}].description",
                              "message": f"No description on trunk {intf or f'trunk port {i}'}."})
+    return findings
 
-    # Port-channels
-    for i, pc in enumerate(interfaces.get("port_channels", [])):
+
+def _validate_port_channels(port_channels: list, all_intf_names: set) -> list:
+    findings = []
+    for i, pc in enumerate(port_channels):
         pc_id = pc.get("id")
         members = pc.get("members", [])
         if not pc_id:
@@ -254,7 +266,6 @@ def _validate_interfaces(interfaces: dict, vlans: list, platform: str) -> list:
             if m.strip() in all_intf_names:
                 findings.append({"severity": "error", "field": f"interfaces.port_channels[{i}].members",
                                  "message": f"Interface {m} is already assigned as a standalone port and as a port-channel member."})
-
     return findings
 
 
@@ -267,11 +278,18 @@ def _validate_routing(routing: dict, vlans: list, platform: str, features: set) 
         except (ValueError, TypeError):
             pass
 
+    findings.extend(_validate_svis(routing.get("svi_list", []), vlan_ids, features))
+    findings.extend(_validate_static_routes(routing.get("static_routes", []), features))
+    return findings
+
+
+def _validate_svis(svi_list: list, vlan_ids: set, features: set) -> list:
+    findings = []
     svi_ips = set()
-    for i, svi in enumerate(routing.get("svi_list", [])):
+    for i, svi in enumerate(svi_list):
         if "svi" not in features and "ip_routing" not in features:
             findings.append({"severity": "error", "field": f"routing.svi_list[{i}]",
-                             "message": f"SVIs are not supported on this platform. L3 routing is not available."})
+                             "message": "SVIs are not supported on this platform. L3 routing is not available."})
             break
 
         vid = svi.get("vlan")
@@ -300,15 +318,19 @@ def _validate_routing(routing: dict, vlans: list, platform: str, features: set) 
             valid, msg = _validate_subnet_mask(mask)
             if not valid:
                 findings.append({"severity": "error", "field": f"routing.svi_list[{i}].mask", "message": f"Invalid SVI subnet mask: {msg}"})
+    return findings
 
-    for i, route in enumerate(routing.get("static_routes", [])):
+
+def _validate_static_routes(routes: list, features: set) -> list:
+    findings = []
+    for i, route in enumerate(routes):
         if "static_routing" not in features:
             findings.append({"severity": "error", "field": f"routing.static_routes[{i}]",
                              "message": "Static routing is not supported on this platform."})
             break
 
         network = route.get("network", "").strip()
-        mask = route.get("mask", "").strip()
+        _mask = route.get("mask", "").strip()  # stored for future validation
         next_hop = route.get("next_hop", "").strip()
 
         if network:
@@ -320,7 +342,6 @@ def _validate_routing(routing: dict, vlans: list, platform: str, features: set) 
             valid, msg = _validate_ip(next_hop)
             if not valid:
                 findings.append({"severity": "error", "field": f"routing.static_routes[{i}].next_hop", "message": f"Invalid next-hop: {msg}"})
-
     return findings
 
 
@@ -480,7 +501,7 @@ def _validate_vlan_list(vlan_str: str) -> tuple:
 def _ip_in_subnet(ip_str: str, mask_str: str, gateway_str: str) -> bool:
     """Check if gateway is in the same subnet as ip/mask."""
     try:
-        ip = ipaddress.ip_address(ip_str.strip())
+        _ip = ipaddress.ip_address(ip_str.strip())  # validates format
         gw = ipaddress.ip_address(gateway_str.strip())
         # Convert mask to prefix length
         parts = mask_str.strip().split(".")
