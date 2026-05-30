@@ -97,11 +97,16 @@ class SnmpConfig(BaseModel):
     v3_priv_password: str = ""
 
 
+class DhcpRelay(BaseModel):
+    svi_vlan: str = ""
+    helper_ip: str = ""
+
+
 class ServiceConfig(BaseModel):
     ntp_servers: List[str] = []
     syslog_servers: List[str] = []
     snmp: SnmpConfig = SnmpConfig()
-    dhcp_relay: List[str] = []
+    dhcp_relay: List[DhcpRelay] = []
 
 
 class RadiusServer(BaseModel):

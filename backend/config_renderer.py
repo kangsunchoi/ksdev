@@ -57,6 +57,7 @@ class ConfigRenderer:
         self._ntp()
         self._syslog()
         self._snmp()
+        self._dhcp_relay()
         self._ssh_crypto()
         self._banner()
         self._line_console()
@@ -458,6 +459,29 @@ class ConfigRenderer:
                     cmd += f" priv {priv_proto} {priv_pass}"
                 self._add(cmd, f"SNMPv3 user with auth ({auth_proto})")
                 self.checklist.append({"section": "SNMP", "item": "SNMPv3 credentials are in config. Secure storage recommended.", "type": "confirmation"})
+
+    def _dhcp_relay(self):
+        entries = self.services.get("dhcp_relay", [])
+        if not entries:
+            return
+        if not is_feature_supported(self.platform, "dhcp_relay"):
+            self.annotated_lines.append("! WARNING: DHCP relay (ip helper-address) may not be supported on this platform. Needs verification.")
+            return
+
+        self._add_section("DHCP RELAY (IP HELPER-ADDRESS)")
+        for entry in entries:
+            vlan = str(entry.get("svi_vlan", "")).strip()
+            helper = entry.get("helper_ip", "").strip()
+            if not vlan or not helper:
+                continue
+            self._add(f"interface Vlan{vlan}", f"Add DHCP relay helper to VLAN {vlan} SVI")
+            self._add(f" ip helper-address {helper}", f"Relay DHCP requests to {helper}")
+
+        self.checklist.append({
+            "section": "DHCP Relay",
+            "item": "Verify DHCP server reachability from each relay SVI and helper-address ordering.",
+            "type": "confirmation"
+        })
 
     def _ssh_crypto(self):
         ssh = self.security.get("ssh", {})

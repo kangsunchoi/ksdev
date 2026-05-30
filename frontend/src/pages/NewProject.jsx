@@ -96,6 +96,7 @@ export default function NewProject() {
         merged.interfaces.port_channels = ensureUids(merged.interfaces.port_channels);
         merged.routing.svi_list = ensureUids(merged.routing.svi_list);
         merged.routing.static_routes = ensureUids(merged.routing.static_routes);
+        merged.services.dhcp_relay = ensureUids(merged.services.dhcp_relay || []);
         merged.security.local_users = ensureUids(merged.security.local_users);
         if (merged.management.dns_servers.length === 0) merged.management.dns_servers = [""];
         if (merged.services.ntp_servers.length === 0) merged.services.ntp_servers = [""];
@@ -131,6 +132,7 @@ export default function NewProject() {
       "interfaces.port_channels": { id: "", members: [], mode: "trunk", protocol: "lacp", allowed_vlans: "", description: "" },
       "routing.svi_list": { vlan: "", ip: "", mask: "255.255.255.0", description: "" },
       "routing.static_routes": { network: "", mask: "", next_hop: "" },
+      "services.dhcp_relay": { svi_vlan: "", helper_ip: "" },
       "security.local_users": { username: "", privilege: 15, secret_type: "9" },
     };
     setForm(prev => {
@@ -610,6 +612,32 @@ function StepRoutingServices({ form, upd, F, addToArray, removeFromArray, update
             </Button>
           </div>
         ))}
+      </div>
+
+      {/* DHCP Relay */}
+      <div className="border-t border-border pt-4">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-medium text-zinc-300">DHCP Relay (ip helper-address)</h3>
+          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => addToArray("services.dhcp_relay")} data-testid="add-dhcp-relay-btn">
+            <Plus className="w-3 h-3 mr-1" /> Add Relay
+          </Button>
+        </div>
+        {(form.services.dhcp_relay || []).map((d, i) => (
+          <div key={d._uid || `dhcp-${i}`} className="grid grid-cols-[120px_1fr_32px] gap-2 items-end mb-2" data-testid={`dhcp-relay-row-${i}`}>
+            <F label={i === 0 ? "SVI VLAN" : ""}>
+              <Input className="ncb-input font-mono" value={d.svi_vlan} onChange={e => updateArrayItem("services.dhcp_relay", i, "svi_vlan", e.target.value)} placeholder="10" data-testid={`dhcp-relay-vlan-${i}`} />
+            </F>
+            <F label={i === 0 ? "DHCP Server IP (helper-address)" : ""}>
+              <Input className="ncb-input font-mono" value={d.helper_ip} onChange={e => updateArrayItem("services.dhcp_relay", i, "helper_ip", e.target.value)} placeholder="10.0.1.5" data-testid={`dhcp-relay-ip-${i}`} />
+            </F>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("services.dhcp_relay", i)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        ))}
+        {(!form.services.dhcp_relay || form.services.dhcp_relay.length === 0) && (
+          <div className="text-xs text-zinc-600 py-2">No DHCP relay configured. Add entries to forward DHCP requests from a VLAN to a central DHCP server (L3 platforms only).</div>
+        )}
       </div>
 
       {/* NTP / Syslog */}

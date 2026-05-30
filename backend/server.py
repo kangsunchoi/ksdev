@@ -288,7 +288,19 @@ async def export_project(project_id: str, format: str):
 # --- Import ---
 @api_router.post("/projects/import")
 async def import_project(data: dict):
-    # Accept a JSON project and create it
+    # Accept either a raw project dict OR { format: "json"|"yaml", content: "..." }
+    if isinstance(data.get("content"), str) and data.get("format") in ("json", "yaml"):
+        try:
+            if data["format"] == "json":
+                data = json.loads(data["content"])
+            else:
+                data = yaml.safe_load(data["content"]) or {}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse {data.get('format', '?')}: {e}")
+
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Imported content must be an object/dict.")
+
     project_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     data["id"] = project_id
@@ -299,6 +311,9 @@ async def import_project(data: dict):
     data["generated_config"] = None
     data["revisions"] = []
     data.pop("_id", None)
+
+    if not data.get("name"):
+        data["name"] = f"Imported Project {now[:10]}"
 
     await db.projects.insert_one(data)
     data.pop("_id", None)

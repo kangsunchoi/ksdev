@@ -367,6 +367,39 @@ def _validate_services(services: dict, features: set) -> list:
     findings.extend(_validate_ntp_servers(services.get("ntp_servers", [])))
     findings.extend(_validate_syslog_servers(services.get("syslog_servers", [])))
     findings.extend(_validate_snmp(services.get("snmp", {})))
+    findings.extend(_validate_dhcp_relay(services.get("dhcp_relay", []), features))
+    return findings
+
+
+def _validate_dhcp_relay(entries: list, features: set) -> list:
+    findings = []
+    if entries and "dhcp_relay" not in features:
+        findings.append({"severity": "error", "field": "services.dhcp_relay",
+                         "message": "DHCP relay is not supported on this platform."})
+        return findings
+    for i, entry in enumerate(entries):
+        vlan = str(entry.get("svi_vlan", "")).strip()
+        helper = (entry.get("helper_ip", "") or "").strip()
+        if not vlan:
+            findings.append({"severity": "error", "field": f"services.dhcp_relay[{i}].svi_vlan",
+                             "message": "DHCP relay entry requires an SVI VLAN."})
+        else:
+            try:
+                v = int(vlan)
+                if v < 1 or v > 4094:
+                    findings.append({"severity": "error", "field": f"services.dhcp_relay[{i}].svi_vlan",
+                                     "message": f"DHCP relay VLAN {v} out of range (1-4094)."})
+            except (ValueError, TypeError):
+                findings.append({"severity": "error", "field": f"services.dhcp_relay[{i}].svi_vlan",
+                                 "message": "DHCP relay VLAN must be a number."})
+        if not helper:
+            findings.append({"severity": "error", "field": f"services.dhcp_relay[{i}].helper_ip",
+                             "message": "DHCP helper-address (IP) is required."})
+        else:
+            valid, msg = _validate_ip(helper)
+            if not valid:
+                findings.append({"severity": "error", "field": f"services.dhcp_relay[{i}].helper_ip",
+                                 "message": f"Invalid DHCP helper IP: {msg}"})
     return findings
 
 
@@ -469,10 +502,6 @@ def _validate_feature_support(project: dict, platform: str, features: set) -> li
     if services.get("snmp", {}).get("version") == "v3" and "snmp_v3" not in features:
         findings.append({"severity": "error", "field": "services.snmp",
                          "message": "SNMPv3 is not supported on this platform."})
-
-    if services.get("dhcp_relay") and "dhcp_relay" not in features:
-        findings.append({"severity": "warning", "field": "services.dhcp_relay",
-                         "message": "DHCP relay may not be supported on this platform. Needs verification."})
 
     return findings
 

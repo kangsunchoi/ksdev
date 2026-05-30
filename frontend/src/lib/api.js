@@ -17,7 +17,7 @@ export const api = {
   generateConfig: (id) => http.post(`/projects/${id}/generate`),
   getRevisions: (id) => http.get(`/projects/${id}/revisions`),
   exportProject: (id, format) => http.get(`/projects/${id}/export/${format}`),
-  importProject: (data) => http.post("/projects/import", data),
+  importProject: (payload) => http.post("/projects/import", payload),
   createFromTemplate: (id) => http.post(`/projects/from-template/${id}`),
 
   listTemplates: (params) => http.get("/templates", { params }),

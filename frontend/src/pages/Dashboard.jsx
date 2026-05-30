@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  FilePlus2, RefreshCw, Server, FileCheck, FileWarning, Files, ChevronRight
+  FilePlus2, RefreshCw, Server, FileCheck, FileWarning, Files, ChevronRight, Upload
 } from "lucide-react";
 
 const statusColors = {
@@ -23,6 +24,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
   const fetchStats = useCallback(async () => {
@@ -39,6 +42,29 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    const name = file.name.toLowerCase();
+    const format = name.endsWith(".yaml") || name.endsWith(".yml") ? "yaml" : "json";
+
+    setImporting(true);
+    try {
+      const content = await file.text();
+      const res = await api.importProject({ format, content });
+      toast.success(`Imported "${res.data.name}"`);
+      navigate(`/projects/${res.data.id}`);
+    } catch (err) {
+      toast.error("Import failed: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -67,6 +93,24 @@ export default function Dashboard() {
           <p className="text-sm text-zinc-500 mt-0.5">Configuration project overview</p>
         </div>
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.yaml,.yml,application/json,text/yaml"
+            className="hidden"
+            onChange={handleImportFile}
+            data-testid="import-file-input"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleImportClick}
+            disabled={importing}
+            data-testid="import-project-btn"
+            className="h-8 text-xs"
+          >
+            <Upload className="w-3.5 h-3.5 mr-1.5" /> {importing ? "Importing..." : "Import"}
+          </Button>
           <Button
             variant="outline"
             size="sm"
