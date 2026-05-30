@@ -246,7 +246,7 @@ export default function NewProject() {
         <div className="w-48 border-r border-border py-4 px-3 shrink-0 space-y-1 bg-card/50">
           {steps.map((s, i) => (
             <button
-              key={i}
+              key={s}
               onClick={() => setStep(i)}
               data-testid={`wizard-step-${i}`}
               className={`step-item w-full text-left px-2 py-1.5 rounded-sm btn-transition ${
@@ -254,9 +254,9 @@ export default function NewProject() {
               }`}
             >
               <span className="step-number">
-                {i < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
+                {i < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : String(i + 1)}
               </span>
-              <span className={`text-xs ${step === i ? "text-blue-400 font-medium" : i < step ? "text-emerald-400" : "text-zinc-500"}`}>
+              <span className={`text-xs ${getStepClass(step, i)}`}>
                 {s}
               </span>
             </button>
@@ -286,6 +286,14 @@ export default function NewProject() {
       </div>
     </div>
   );
+}
+
+/* ============ Helpers ============ */
+
+function getStepClass(currentStep, idx) {
+  if (currentStep === idx) return "text-blue-400 font-medium";
+  if (idx < currentStep) return "text-emerald-400";
+  return "text-zinc-500";
 }
 
 /* ============ Step Components ============ */
@@ -363,7 +371,7 @@ function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray }) {
       <div>
         <Label className="text-xs text-zinc-400 mb-1 block">DNS Servers</Label>
         {form.management.dns_servers.map((dns, i) => (
-          <div key={i} className="flex gap-2 mb-1.5">
+          <div key={`dns-${dns || "empty"}-${i}`} className="flex gap-2 mb-1.5">
             <Input className="ncb-input font-mono flex-1" value={dns} onChange={e => updateStringArray("management.dns_servers", i, e.target.value)} placeholder="10.0.1.10" data-testid={`input-dns-${i}`} />
             {form.management.dns_servers.length > 1 && (
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => {
@@ -609,7 +617,7 @@ function StepRoutingServices({ form, upd, F, addToArray, removeFromArray, update
         <div>
           <Label className="text-xs text-zinc-400 mb-1 block">NTP Servers</Label>
           {form.services.ntp_servers.map((s, i) => (
-            <div key={i} className="flex gap-2 mb-1.5">
+            <div key={`ntp-${s || "empty"}-${i}`} className="flex gap-2 mb-1.5">
               <Input className="ncb-input font-mono flex-1" value={s} onChange={e => updateStringArray("services.ntp_servers", i, e.target.value)} placeholder="10.0.1.10" />
               {form.services.ntp_servers.length > 1 && (
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => {
@@ -625,7 +633,7 @@ function StepRoutingServices({ form, upd, F, addToArray, removeFromArray, update
         <div>
           <Label className="text-xs text-zinc-400 mb-1 block">Syslog Servers</Label>
           {form.services.syslog_servers.map((s, i) => (
-            <div key={i} className="flex gap-2 mb-1.5">
+            <div key={`syslog-${s || "empty"}-${i}`} className="flex gap-2 mb-1.5">
               <Input className="ncb-input font-mono flex-1" value={s} onChange={e => updateStringArray("services.syslog_servers", i, e.target.value)} placeholder="10.0.1.20" />
               {form.services.syslog_servers.length > 1 && (
                 <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => {

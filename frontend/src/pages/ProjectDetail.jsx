@@ -234,7 +234,7 @@ function AnnotatedConfigTab({ config, copyToClipboard }) {
           <ScrollArea className="h-full">
             <pre className="config-output m-4 min-h-full" data-testid="annotated-config-output">
               {config.annotated_config.split("\n").map((line, i) => (
-                <span key={i} className={line.startsWith("! >>") ? "text-blue-400" : line.startsWith("!") ? "text-zinc-600" : ""}>
+                <span key={i} className={getAnnotationClass(line)}>
                   {line}{"\n"}
                 </span>
               ))}
@@ -246,6 +246,12 @@ function AnnotatedConfigTab({ config, copyToClipboard }) {
       )}
     </TabsContent>
   );
+}
+
+function getAnnotationClass(line) {
+  if (line.startsWith("! >>")) return "text-blue-400";
+  if (line.startsWith("!")) return "text-zinc-600";
+  return "";
 }
 
 function ValidationTab({ findings, errors, warnings, infos }) {

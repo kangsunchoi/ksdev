@@ -7,7 +7,14 @@ from datetime import datetime, timezone
 
 def get_seed_templates():
     return [
-        {
+        _ie3300_access_template(),
+        _catalyst_9300_distribution_template(),
+        _wlc_9800_basic_template(),
+    ]
+
+
+def _ie3300_access_template():
+    return {
             "id": str(uuid.uuid4()),
             "name": "IE3300 Access Switch Base Config",
             "description": "Standard base configuration for Cisco IE3300 industrial access switch. L2 only with management VLAN, standard VLANs, access/trunk ports, NTP, syslog, and security hardening.",
@@ -78,8 +85,11 @@ def get_seed_templates():
                 },
                 "notes": "",
             },
-        },
-        {
+    }
+
+
+def _catalyst_9300_distribution_template():
+    return {
             "id": str(uuid.uuid4()),
             "name": "Catalyst 9300 L3 Distribution Switch",
             "description": "Standard L3 distribution switch template for Catalyst 9300 with inter-VLAN routing, SVIs, HSRP-ready, NTP, syslog, SNMPv3, and full security hardening.",
@@ -152,8 +162,11 @@ def get_seed_templates():
                 "industrial": {},
                 "notes": "Standard distribution switch template. Adjust SVI IPs and VLAN list per site.",
             },
-        },
-        {
+    }
+
+
+def _wlc_9800_basic_template():
+    return {
             "id": str(uuid.uuid4()),
             "name": "WLC 9800 Basic SSID/VLAN Mapping",
             "description": "Basic WLC 9800 management template. WLAN/SSID configuration is not yet fully supported - this template provides management baseline only.",
@@ -202,8 +215,7 @@ def get_seed_templates():
                 "industrial": {},
                 "notes": "WLC config generation is limited. WLAN/SSID profiles must be configured manually.",
             },
-        },
-    ]
+    }
 
 
 def get_sample_project():

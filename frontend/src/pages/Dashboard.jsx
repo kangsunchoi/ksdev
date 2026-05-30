@@ -22,15 +22,17 @@ const platformLabels = {
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await api.getStats();
       setStats(res.data);
-    } catch {
-      // stats load failed
+    } catch (err) {
+      setError(err.message || "Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
@@ -42,6 +44,17 @@ export default function Dashboard() {
     return (
       <div className="p-6" data-testid="dashboard-loading">
         <div className="text-zinc-500 text-sm">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6" data-testid="dashboard-error">
+        <div className="text-red-400 text-sm">{error}</div>
+        <Button variant="outline" size="sm" className="h-8 text-xs mt-3" onClick={fetchStats}>
+          <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+        </Button>
       </div>
     );
   }

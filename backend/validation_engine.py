@@ -80,6 +80,15 @@ def _validate_management(mgmt: dict, platform: str) -> list:
     mgmt_mask = mgmt.get("mgmt_mask", "").strip()
     gateway = mgmt.get("default_gateway", "").strip()
 
+    findings.extend(_validate_mgmt_ip(mgmt_ip, mgmt_mask))
+    findings.extend(_validate_mgmt_gateway(mgmt_ip, mgmt_mask, gateway))
+    findings.extend(_validate_mgmt_vlan(mgmt.get("mgmt_vlan")))
+    findings.extend(_validate_dns_servers(mgmt.get("dns_servers", [])))
+    return findings
+
+
+def _validate_mgmt_ip(mgmt_ip: str, mgmt_mask: str) -> list:
+    findings = []
     if mgmt_ip:
         valid, msg = _validate_ip(mgmt_ip)
         if not valid:
@@ -91,20 +100,25 @@ def _validate_management(mgmt: dict, platform: str) -> list:
         valid, msg = _validate_subnet_mask(mgmt_mask)
         if not valid:
             findings.append({"severity": "error", "field": "management.mgmt_mask", "message": f"Invalid subnet mask: {msg}"})
+    return findings
 
-    if mgmt_ip and mgmt_mask and gateway:
-        if not _ip_in_subnet(mgmt_ip, mgmt_mask, gateway):
-            findings.append({"severity": "error", "field": "management.default_gateway",
-                             "message": "Default gateway is not in the same subnet as management IP."})
 
+def _validate_mgmt_gateway(mgmt_ip: str, mgmt_mask: str, gateway: str) -> list:
+    findings = []
     if gateway:
         valid, msg = _validate_ip(gateway)
         if not valid:
             findings.append({"severity": "error", "field": "management.default_gateway", "message": f"Invalid gateway IP: {msg}"})
+        elif mgmt_ip and mgmt_mask and not _ip_in_subnet(mgmt_ip, mgmt_mask, gateway):
+            findings.append({"severity": "error", "field": "management.default_gateway",
+                             "message": "Default gateway is not in the same subnet as management IP."})
     elif mgmt_ip:
         findings.append({"severity": "warning", "field": "management.default_gateway", "message": "No default gateway configured."})
+    return findings
 
-    mgmt_vlan = mgmt.get("mgmt_vlan")
+
+def _validate_mgmt_vlan(mgmt_vlan) -> list:
+    findings = []
     if mgmt_vlan:
         try:
             v = int(mgmt_vlan)
@@ -112,13 +126,16 @@ def _validate_management(mgmt: dict, platform: str) -> list:
                 findings.append({"severity": "error", "field": "management.mgmt_vlan", "message": "Management VLAN must be between 1 and 4094."})
         except (ValueError, TypeError):
             findings.append({"severity": "error", "field": "management.mgmt_vlan", "message": "Management VLAN must be a number."})
+    return findings
 
-    for dns in mgmt.get("dns_servers", []):
+
+def _validate_dns_servers(dns_servers: list) -> list:
+    findings = []
+    for dns in dns_servers:
         if dns.strip():
             valid, msg = _validate_ip(dns.strip())
             if not valid:
                 findings.append({"severity": "error", "field": "management.dns_servers", "message": f"Invalid DNS server IP '{dns}': {msg}"})
-
     return findings
 
 
@@ -131,7 +148,7 @@ def _validate_vlans(vlans: list, mgmt: dict) -> list:
         vid = vlan.get("id")
         vname = vlan.get("name", "")
 
-        if vid is None or vid == "":
+        if vid is None or vid == "":  # noqa: E711 - intentional None check + empty string check
             findings.append({"severity": "error", "field": f"vlans[{i}].id", "message": f"VLAN at index {i} has no ID."})
             continue
 
@@ -347,33 +364,48 @@ def _validate_static_routes(routes: list, features: set) -> list:
 
 def _validate_services(services: dict, features: set) -> list:
     findings = []
+    findings.extend(_validate_ntp_servers(services.get("ntp_servers", [])))
+    findings.extend(_validate_syslog_servers(services.get("syslog_servers", [])))
+    findings.extend(_validate_snmp(services.get("snmp", {})))
+    return findings
 
-    for ntp in services.get("ntp_servers", []):
+
+def _validate_ntp_servers(ntp_servers: list) -> list:
+    findings = []
+    for ntp in ntp_servers:
         if ntp.strip():
             valid, msg = _validate_ip(ntp.strip())
             if not valid:
                 findings.append({"severity": "error", "field": "services.ntp_servers", "message": f"Invalid NTP server IP '{ntp}': {msg}"})
 
-    if not services.get("ntp_servers") or not any(s.strip() for s in services.get("ntp_servers", [])):
+    if not ntp_servers or not any(s.strip() for s in ntp_servers):
         findings.append({"severity": "warning", "field": "services.ntp_servers", "message": "No NTP servers configured. Time synchronization is critical for logging and certificates."})
+    return findings
 
-    for syslog in services.get("syslog_servers", []):
+
+def _validate_syslog_servers(syslog_servers: list) -> list:
+    findings = []
+    for syslog in syslog_servers:
         if syslog.strip():
             valid, msg = _validate_ip(syslog.strip())
             if not valid:
                 findings.append({"severity": "error", "field": "services.syslog_servers", "message": f"Invalid syslog server IP '{syslog}': {msg}"})
+    return findings
 
-    snmp = services.get("snmp", {})
-    if snmp.get("version") == "v3":
-        if not snmp.get("v3_user"):
-            findings.append({"severity": "error", "field": "services.snmp.v3_user", "message": "SNMPv3 requires a username."})
-        if not snmp.get("v3_auth_protocol"):
-            findings.append({"severity": "error", "field": "services.snmp.v3_auth_protocol", "message": "SNMPv3 requires an authentication protocol (SHA/MD5)."})
-        if not snmp.get("v3_auth_password"):
-            findings.append({"severity": "error", "field": "services.snmp.v3_auth_password", "message": "SNMPv3 requires an authentication password."})
-        if snmp.get("v3_priv_protocol") and not snmp.get("v3_priv_password"):
-            findings.append({"severity": "error", "field": "services.snmp.v3_priv_password", "message": "SNMPv3 privacy protocol requires a privacy password."})
 
+def _validate_snmp(snmp: dict) -> list:
+    findings = []
+    if snmp.get("version") != "v3":
+        return findings
+
+    if not snmp.get("v3_user"):
+        findings.append({"severity": "error", "field": "services.snmp.v3_user", "message": "SNMPv3 requires a username."})
+    if not snmp.get("v3_auth_protocol"):
+        findings.append({"severity": "error", "field": "services.snmp.v3_auth_protocol", "message": "SNMPv3 requires an authentication protocol (SHA/MD5)."})
+    if not snmp.get("v3_auth_password"):
+        findings.append({"severity": "error", "field": "services.snmp.v3_auth_password", "message": "SNMPv3 requires an authentication password."})
+    if snmp.get("v3_priv_protocol") and not snmp.get("v3_priv_password"):
+        findings.append({"severity": "error", "field": "services.snmp.v3_priv_password", "message": "SNMPv3 privacy protocol requires a privacy password."})
     return findings
 
 
