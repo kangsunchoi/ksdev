@@ -2,7 +2,10 @@ import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-const http = axios.create({ baseURL: API, timeout: 30000 });
+// Default request timeout for all API calls (milliseconds).
+const API_TIMEOUT_MS = 30000;
+
+const http = axios.create({ baseURL: API, timeout: API_TIMEOUT_MS });
 
 export const api = {
   getStats: () => http.get("/stats"),

@@ -34,6 +34,11 @@ const ROLES = [
 
 const OS_VERSIONS = ["17.3", "17.6", "17.9", "17.12"];
 
+// Cisco privilege level 15 = full administrative access (enable mode).
+const DEFAULT_PRIVILEGE_LEVEL = 15;
+// Default RSA modulus size (bits) for SSH crypto key generation.
+const DEFAULT_RSA_KEY_BITS = 2048;
+
 const INDUSTRIAL_PLATFORMS = ["ie3300", "ie3400", "ie9320"];
 
 const INDUSTRIAL_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "industrial");
@@ -51,7 +56,7 @@ const defaultForm = () => ({
   routing: { svi_list: [], static_routes: [] },
   stp: { mode: "rapid-pvst", priority: {} },
   services: { ntp_servers: [""], syslog_servers: [""], snmp: { version: "", community: "", v3_user: "", v3_auth_protocol: "", v3_auth_password: "", v3_priv_protocol: "", v3_priv_password: "" }, dhcp_relay: [] },
-  security: { aaa: { enabled: true, method: "local", radius_servers: [] }, local_users: [{ username: "", privilege: 15, secret_type: "9" }], ssh: { version: 2, timeout: 60, retries: 3, rsa_bits: 2048 }, banner: "", line_vty: { transport: "ssh", access_class: "" } },
+  security: { aaa: { enabled: true, method: "local", radius_servers: [] }, local_users: [{ username: "", privilege: DEFAULT_PRIVILEGE_LEVEL, secret_type: "9" }], ssh: { version: 2, timeout: 60, retries: 3, rsa_bits: DEFAULT_RSA_KEY_BITS }, banner: "", line_vty: { transport: "ssh", access_class: "" } },
   industrial: { panel_name: "", cabinet_name: "", peer_role: "none", uplink_role: "", ring_link_role: "", multicast_relevance: "", industrial_notes: "" },
   notes: "",
 });
@@ -101,7 +106,7 @@ export default function NewProject() {
         if (merged.management.dns_servers.length === 0) merged.management.dns_servers = [""];
         if (merged.services.ntp_servers.length === 0) merged.services.ntp_servers = [""];
         if (merged.services.syslog_servers.length === 0) merged.services.syslog_servers = [""];
-        if (merged.security.local_users.length === 0) merged.security.local_users = [{ username: "", privilege: 15, secret_type: "9", _uid: uid() }];
+        if (merged.security.local_users.length === 0) merged.security.local_users = [{ username: "", privilege: DEFAULT_PRIVILEGE_LEVEL, secret_type: "9", _uid: uid() }];
         setForm(merged);
         setLoaded(true);
       } catch { if (!cancelled) { toast.error("Failed to load project"); navigate("/"); } }
@@ -133,7 +138,7 @@ export default function NewProject() {
       "routing.svi_list": { vlan: "", ip: "", mask: "255.255.255.0", description: "" },
       "routing.static_routes": { network: "", mask: "", next_hop: "" },
       "services.dhcp_relay": { svi_vlan: "", helper_ip: "" },
-      "security.local_users": { username: "", privilege: 15, secret_type: "9" },
+      "security.local_users": { username: "", privilege: DEFAULT_PRIVILEGE_LEVEL, secret_type: "9" },
     };
     setForm(prev => {
       const next = JSON.parse(JSON.stringify(prev));
@@ -251,9 +256,7 @@ export default function NewProject() {
               key={s}
               onClick={() => setStep(i)}
               data-testid={`wizard-step-${i}`}
-              className={`step-item w-full text-left px-2 py-1.5 rounded-sm btn-transition ${
-                step === i ? "active" : i < step ? "completed" : ""
-              }`}
+              className={`step-item w-full text-left px-2 py-1.5 rounded-sm btn-transition ${getStepState(step, i)}`}
             >
               <span className="step-number">
                 {i < step ? <CheckCircle2 className="w-3.5 h-3.5" /> : String(i + 1)}
@@ -296,6 +299,12 @@ function getStepClass(currentStep, idx) {
   if (currentStep === idx) return "text-blue-400 font-medium";
   if (idx < currentStep) return "text-emerald-400";
   return "text-zinc-500";
+}
+
+function getStepState(currentStep, idx) {
+  if (currentStep === idx) return "active";
+  if (idx < currentStep) return "completed";
+  return "";
 }
 
 /* ============ Step Components ============ */
