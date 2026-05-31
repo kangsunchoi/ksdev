@@ -282,38 +282,41 @@ class ConfigRenderer:
 
         self._add_section("PORT-CHANNEL CONFIGURATION")
         for pc in pcs:
-            pc_id = pc.get("id", "")
-            members = pc.get("members", [])
-            mode = pc.get("mode", "trunk")
-            allowed = pc.get("allowed_vlans", "").strip()
-            desc = pc.get("description", "").strip()
-            protocol = pc.get("protocol", "lacp")
-
-            # Configure member interfaces first
-            for member in members:
-                member = member.strip()
-                if member:
-                    self._add(f"interface {member}", f"Port-channel {pc_id} member")
-                    if desc:
-                        self._add(f" description {desc} (Po{pc_id} member)")
-                    self._add(f" channel-group {pc_id} mode active" if protocol == "lacp" else f" channel-group {pc_id} mode on")
-
-            # Configure the port-channel interface
-            self._add(f"interface Port-channel{pc_id}", "Logical port-channel interface")
-            if desc:
-                self._add(f" description {desc}")
-            if mode == "trunk":
-                self._add(" switchport mode trunk")
-                if allowed and allowed.lower() != "all":
-                    self._add(f" switchport trunk allowed vlan {allowed}")
-            elif mode == "access":
-                self._add(" switchport mode access")
-                vlan = pc.get("vlan", "")
-                if vlan:
-                    self._add(f" switchport access vlan {vlan}")
-            self._add(" no shutdown")
+            self._render_pc_members(pc)
+            self._render_pc_interface(pc)
 
         self.checklist.append({"section": "Port-Channels", "item": "Verify port-channel members and protocol (LACP/static) match peer device", "type": "confirmation"})
+
+    def _render_pc_members(self, pc):
+        pc_id = pc.get("id", "")
+        desc = pc.get("description", "").strip()
+        protocol = pc.get("protocol", "lacp")
+        for member in pc.get("members", []):
+            member = member.strip()
+            if member:
+                self._add(f"interface {member}", f"Port-channel {pc_id} member")
+                if desc:
+                    self._add(f" description {desc} (Po{pc_id} member)")
+                self._add(f" channel-group {pc_id} mode active" if protocol == "lacp" else f" channel-group {pc_id} mode on")
+
+    def _render_pc_interface(self, pc):
+        pc_id = pc.get("id", "")
+        mode = pc.get("mode", "trunk")
+        allowed = pc.get("allowed_vlans", "").strip()
+        desc = pc.get("description", "").strip()
+        self._add(f"interface Port-channel{pc_id}", "Logical port-channel interface")
+        if desc:
+            self._add(f" description {desc}")
+        if mode == "trunk":
+            self._add(" switchport mode trunk")
+            if allowed and allowed.lower() != "all":
+                self._add(f" switchport trunk allowed vlan {allowed}")
+        elif mode == "access":
+            self._add(" switchport mode access")
+            vlan = pc.get("vlan", "")
+            if vlan:
+                self._add(f" switchport access vlan {vlan}")
+        self._add(" no shutdown")
 
     def _svi(self):
         svis = self.routing.get("svi_list", [])
@@ -351,19 +354,25 @@ class ConfigRenderer:
         is_l2_only = platform_profile and platform_profile.get("layer", 2) == 2
 
         if is_l2_only:
-            # L2 switches use ip default-gateway instead of ip route
-            for route in routes:
-                if route.get("network", "").strip() == "0.0.0.0":
-                    self._add_section("DEFAULT GATEWAY (L2)")
-                    self._add(f"ip default-gateway {route.get('next_hop', '').strip()}",
-                              "Default gateway for L2 switch management traffic")
-                    self.checklist.append({"section": "Default Gateway", "item": "Verify default gateway is reachable from management VLAN", "type": "confirmation"})
+            self._render_l2_default_gateway(routes)
             return
 
         if not is_feature_supported(self.platform, "static_routing"):
             self.annotated_lines.append("! WARNING: Static routing not supported. Skipping.")
             return
 
+        self._render_static_routes(routes)
+
+    def _render_l2_default_gateway(self, routes):
+        # L2 switches use ip default-gateway instead of ip route
+        for route in routes:
+            if route.get("network", "").strip() == "0.0.0.0":
+                self._add_section("DEFAULT GATEWAY (L2)")
+                self._add(f"ip default-gateway {route.get('next_hop', '').strip()}",
+                          "Default gateway for L2 switch management traffic")
+                self.checklist.append({"section": "Default Gateway", "item": "Verify default gateway is reachable from management VLAN", "type": "confirmation"})
+
+    def _render_static_routes(self, routes):
         self._add_section("STATIC ROUTES")
         for route in routes:
             network = route.get("network", "").strip()

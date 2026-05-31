@@ -253,37 +253,44 @@ def _validate_access_ports(ports: list, vlan_ids: set, all_intf_names: set) -> l
     return findings
 
 
+def _validate_single_trunk_port(index: int, port: dict, all_intf_names: set) -> list:
+    """Validate one trunk port. Mutates all_intf_names. Returns findings for this port."""
+    findings = []
+    intf = port.get("interface", "").strip()
+    if not intf:
+        findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{index}].interface", "message": "Interface name is required."})
+    elif intf in all_intf_names:
+        findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{index}].interface", "message": f"Duplicate interface: {intf}."})
+    else:
+        all_intf_names.add(intf)
+
+    allowed = port.get("allowed_vlans", "").strip()
+    if allowed and allowed.lower() != "all":
+        valid, msg = _validate_vlan_list(allowed)
+        if not valid:
+            findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{index}].allowed_vlans",
+                             "message": f"Invalid trunk allowed VLAN list on {intf}: {msg}"})
+
+    native = port.get("native_vlan")
+    if native:
+        try:
+            nv = int(native)
+            if nv == 1:
+                findings.append({"severity": "warning", "field": f"interfaces.trunk_ports[{index}].native_vlan",
+                                 "message": f"Native VLAN on {intf} is VLAN 1 (default). Consider using a dedicated native VLAN."})
+        except (ValueError, TypeError):
+            findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{index}].native_vlan", "message": f"Invalid native VLAN on {intf}."})
+
+    if not port.get("description"):
+        findings.append({"severity": "info", "field": f"interfaces.trunk_ports[{index}].description",
+                         "message": f"No description on trunk {intf or f'trunk port {index}'}."})
+    return findings
+
+
 def _validate_trunk_ports(ports: list, all_intf_names: set) -> list:
     findings = []
     for i, port in enumerate(ports):
-        intf = port.get("interface", "").strip()
-        if not intf:
-            findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{i}].interface", "message": "Interface name is required."})
-        elif intf in all_intf_names:
-            findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{i}].interface", "message": f"Duplicate interface: {intf}."})
-        else:
-            all_intf_names.add(intf)
-
-        allowed = port.get("allowed_vlans", "").strip()
-        if allowed and allowed.lower() != "all":
-            valid, msg = _validate_vlan_list(allowed)
-            if not valid:
-                findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{i}].allowed_vlans",
-                                 "message": f"Invalid trunk allowed VLAN list on {intf}: {msg}"})
-
-        native = port.get("native_vlan")
-        if native:
-            try:
-                nv = int(native)
-                if nv == 1:
-                    findings.append({"severity": "warning", "field": f"interfaces.trunk_ports[{i}].native_vlan",
-                                     "message": f"Native VLAN on {intf} is VLAN 1 (default). Consider using a dedicated native VLAN."})
-            except (ValueError, TypeError):
-                findings.append({"severity": "error", "field": f"interfaces.trunk_ports[{i}].native_vlan", "message": f"Invalid native VLAN on {intf}."})
-
-        if not port.get("description"):
-            findings.append({"severity": "info", "field": f"interfaces.trunk_ports[{i}].description",
-                             "message": f"No description on trunk {intf or f'trunk port {i}'}."})
+        findings.extend(_validate_single_trunk_port(i, port, all_intf_names))
     return findings
 
 
@@ -318,41 +325,52 @@ def _validate_routing(routing: dict, vlans: list, platform: str, features: set) 
     return findings
 
 
+def _validate_single_svi(index: int, svi: dict, vlan_ids: set, svi_ips: set) -> list:
+    """Validate one SVI entry. Mutates svi_ips. Returns findings for this SVI."""
+    findings = []
+    vid = svi.get("vlan")
+    ip = svi.get("ip", "").strip()
+    mask = svi.get("mask", "").strip()
+
+    if vid:
+        try:
+            v = int(vid)
+            if vlan_ids and v not in vlan_ids:
+                findings.append({"severity": "warning", "field": f"routing.svi_list[{index}].vlan",
+                                 "message": f"SVI VLAN {v} is not in the VLAN list."})
+        except (ValueError, TypeError):
+            findings.append({"severity": "error", "field": f"routing.svi_list[{index}].vlan", "message": "Invalid VLAN ID for SVI."})
+
+    if ip:
+        valid, msg = _validate_ip(ip)
+        if not valid:
+            findings.append({"severity": "error", "field": f"routing.svi_list[{index}].ip", "message": f"Invalid SVI IP: {msg}"})
+        elif ip in svi_ips:
+            findings.append({"severity": "error", "field": f"routing.svi_list[{index}].ip", "message": f"Duplicate IP address: {ip}"})
+        else:
+            svi_ips.add(ip)
+
+    if mask:
+        valid, msg = _validate_subnet_mask(mask)
+        if not valid:
+            findings.append({"severity": "error", "field": f"routing.svi_list[{index}].mask", "message": f"Invalid SVI subnet mask: {msg}"})
+    return findings
+
+
 def _validate_svis(svi_list: list, vlan_ids: set, features: set) -> list:
+    if not svi_list:
+        return []
+
+    # Platform support is loop-invariant: if SVIs are unsupported, the original
+    # code flagged the first entry and stopped, so report once and return.
+    if "svi" not in features and "ip_routing" not in features:
+        return [{"severity": "error", "field": "routing.svi_list[0]",
+                 "message": "SVIs are not supported on this platform. L3 routing is not available."}]
+
     findings = []
     svi_ips = set()
     for i, svi in enumerate(svi_list):
-        if "svi" not in features and "ip_routing" not in features:
-            findings.append({"severity": "error", "field": f"routing.svi_list[{i}]",
-                             "message": "SVIs are not supported on this platform. L3 routing is not available."})
-            break
-
-        vid = svi.get("vlan")
-        ip = svi.get("ip", "").strip()
-        mask = svi.get("mask", "").strip()
-
-        if vid:
-            try:
-                v = int(vid)
-                if vlan_ids and v not in vlan_ids:
-                    findings.append({"severity": "warning", "field": f"routing.svi_list[{i}].vlan",
-                                     "message": f"SVI VLAN {v} is not in the VLAN list."})
-            except (ValueError, TypeError):
-                findings.append({"severity": "error", "field": f"routing.svi_list[{i}].vlan", "message": "Invalid VLAN ID for SVI."})
-
-        if ip:
-            valid, msg = _validate_ip(ip)
-            if not valid:
-                findings.append({"severity": "error", "field": f"routing.svi_list[{i}].ip", "message": f"Invalid SVI IP: {msg}"})
-            elif ip in svi_ips:
-                findings.append({"severity": "error", "field": f"routing.svi_list[{i}].ip", "message": f"Duplicate IP address: {ip}"})
-            else:
-                svi_ips.add(ip)
-
-        if mask:
-            valid, msg = _validate_subnet_mask(mask)
-            if not valid:
-                findings.append({"severity": "error", "field": f"routing.svi_list[{i}].mask", "message": f"Invalid SVI subnet mask: {msg}"})
+        findings.extend(_validate_single_svi(i, svi, vlan_ids, svi_ips))
     return findings
 
 
