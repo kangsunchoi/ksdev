@@ -13,16 +13,6 @@ import {
   ChevronLeft, ChevronRight, Save, Plus, Trash2, CheckCircle2, AlertTriangle, Loader2
 } from "lucide-react";
 
-const PLATFORMS = [
-  { value: "ie3300", label: "Cisco IE3300", cat: "industrial" },
-  { value: "ie3400", label: "Cisco IE3400", cat: "industrial" },
-  { value: "ie9320", label: "Cisco IE9320", cat: "industrial" },
-  { value: "catalyst_9200", label: "Catalyst 9200", cat: "campus" },
-  { value: "catalyst_9300", label: "Catalyst 9300", cat: "campus" },
-  { value: "catalyst_9500", label: "Catalyst 9500", cat: "campus" },
-  { value: "wlc_9800", label: "WLC 9800", cat: "wireless" },
-];
-
 const ROLES = [
   { value: "access_switch", label: "Access Switch" },
   { value: "distribution_switch", label: "Distribution / L3 Switch" },
@@ -32,24 +22,44 @@ const ROLES = [
   { value: "wlc", label: "Wireless LAN Controller" },
 ];
 
-const OS_VERSIONS = ["17.3", "17.6", "17.9", "17.12"];
-
 // Cisco privilege level 15 = full administrative access (enable mode).
 const DEFAULT_PRIVILEGE_LEVEL = 15;
 // Default RSA modulus size (bits) for SSH crypto key generation.
 const DEFAULT_RSA_KEY_BITS = 2048;
 
-const INDUSTRIAL_PLATFORMS = ["ie3300", "ie3400", "ie9320"];
+// Platform and version data now come from the backend (/api/platforms) so the
+// New Config screen stays in sync with backend platform_profiles.py automatically.
+// Ordered category groups for the platform dropdown.
+const PLATFORM_GROUPS = [
+  ["industrial", "Industrial"],
+  ["campus", "Campus"],
+  ["wireless", "Wireless"],
+  ["smb", "Small Business"],
+];
 
-const INDUSTRIAL_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "industrial");
-const CAMPUS_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "campus");
-const WIRELESS_PLATFORMS_LIST = PLATFORMS.filter(p => p.cat === "wireless");
+// Load the platform catalog from the backend once.
+function usePlatforms() {
+  const [platforms, setPlatforms] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    api.getPlatforms()
+      .then(res => { if (!cancelled) setPlatforms(res.data?.platforms || []); })
+      .catch(() => { if (!cancelled) toast.error("Failed to load platform list"); });
+    return () => { cancelled = true; };
+  }, []);
+  return platforms;
+}
+
+// Version label depends on OS family (IOS-XE vs Small Business firmware).
+function versionLabel(osFamily, v) {
+  return osFamily === "cisco_sb" ? `Firmware ${v}` : `IOS-XE ${v}`;
+}
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 const defaultForm = () => ({
   name: "",
-  device: { role: "access_switch", vendor: "cisco", platform_family: "", os_family: "ios_xe", os_version: "17.9", hostname: "" },
+  device: { role: "access_switch", vendor: "cisco", platform_family: "", os_family: "ios_xe", os_version: "", hostname: "" },
   management: { mgmt_vlan: "", mgmt_ip: "", mgmt_mask: "255.255.255.0", default_gateway: "", dns_servers: [""], domain_name: "" },
   vlans: [],
   interfaces: { access_ports: [], trunk_ports: [], port_channels: [] },
@@ -197,7 +207,21 @@ export default function NewProject() {
     updateArrayItem, updateStringArray, addStringToArray,
   } = useProjectForm(id, navigate);
 
-  const isIndustrial = INDUSTRIAL_PLATFORMS.includes(form.device.platform_family);
+  const platforms = usePlatforms();
+  const curPlatform = platforms.find(p => p.id === form.device.platform_family);
+  const isIndustrial = curPlatform?.category === "industrial";
+
+  // When the platform changes, also set the matching OS family and default to
+  // the latest (recommended) supported version for that platform.
+  const onPlatformChange = (platId) => {
+    const p = platforms.find(x => x.id === platId);
+    upd("device.platform_family", platId);
+    if (p) {
+      upd("device.os_family", p.os_family || "ios_xe");
+      const vers = p.supported_versions || [];
+      upd("device.os_version", vers.length ? vers[vers.length - 1] : "");
+    }
+  };
   const steps = [
     "Device & Management", "VLANs", "Interfaces", "Routing & Services", "Security",
     ...(isIndustrial ? ["Industrial OT"] : []), "Review"
@@ -236,14 +260,14 @@ export default function NewProject() {
 
   const renderStep = () => {
     switch (step) {
-      case 0: return <StepDeviceMgmt form={form} upd={upd} F={F} updateStringArray={updateStringArray} addStringToArray={addStringToArray} />;
+      case 0: return <StepDeviceMgmt form={form} upd={upd} F={F} updateStringArray={updateStringArray} addStringToArray={addStringToArray} platforms={platforms} onPlatformChange={onPlatformChange} />;
       case 1: return <StepVlans form={form} addToArray={addToArray} removeFromArray={removeFromArray} updateArrayItem={updateArrayItem} F={F} />;
       case 2: return <StepInterfaces form={form} addToArray={addToArray} removeFromArray={removeFromArray} updateArrayItem={updateArrayItem} F={F} />;
       case 3: return <StepRoutingServices form={form} upd={upd} F={F} addToArray={addToArray} removeFromArray={removeFromArray} updateArrayItem={updateArrayItem} updateStringArray={updateStringArray} addStringToArray={addStringToArray} />;
       case 4: return <StepSecurity form={form} upd={upd} F={F} addToArray={addToArray} removeFromArray={removeFromArray} updateArrayItem={updateArrayItem} />;
       default:
         if (isIndustrial && step === 5) return <StepIndustrial form={form} upd={upd} F={F} />;
-        return <StepReview form={form} />;
+        return <StepReview form={form} platforms={platforms} />;
     }
   };
 
@@ -318,7 +342,9 @@ function getStepState(currentStep, idx) {
 
 /* ============ Step Components ============ */
 
-function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray }) {
+function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray, platforms, onPlatformChange }) {
+  const cur = platforms.find(p => p.id === form.device.platform_family);
+  const versions = cur?.supported_versions || [];
   return (
     <div className="space-y-6">
       <F label="Project Name">
@@ -326,27 +352,31 @@ function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray }) {
       </F>
       <div className="grid grid-cols-3 gap-4">
         <F label="Platform Family">
-          <Select value={form.device.platform_family} onValueChange={v => upd("device.platform_family", v)}>
+          <Select value={form.device.platform_family} onValueChange={onPlatformChange}>
             <SelectTrigger className="ncb-select-trigger" data-testid="select-platform">
               <SelectValue placeholder="Select platform" />
             </SelectTrigger>
             <SelectContent>
-              <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase">Industrial</div>
-              {INDUSTRIAL_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-              <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase mt-1">Campus</div>
-              {CAMPUS_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-              <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase mt-1">Wireless</div>
-              {WIRELESS_PLATFORMS_LIST.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+              {PLATFORM_GROUPS.map(([cat, label]) => {
+                const items = platforms.filter(p => p.category === cat);
+                if (!items.length) return null;
+                return (
+                  <div key={cat}>
+                    <div className="px-2 py-1 text-[10px] text-zinc-500 uppercase mt-1">{label}</div>
+                    {items.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </div>
+                );
+              })}
             </SelectContent>
           </Select>
         </F>
         <F label="OS Version">
           <Select value={form.device.os_version} onValueChange={v => upd("device.os_version", v)}>
             <SelectTrigger className="ncb-select-trigger" data-testid="select-os-version">
-              <SelectValue />
+              <SelectValue placeholder="Select version" />
             </SelectTrigger>
             <SelectContent>
-              {OS_VERSIONS.map(v => <SelectItem key={v} value={v}>IOS-XE {v}</SelectItem>)}
+              {versions.map(v => <SelectItem key={v} value={v}>{versionLabel(cur?.os_family, v)}</SelectItem>)}
             </SelectContent>
           </Select>
         </F>
@@ -925,8 +955,10 @@ function StepIndustrial({ form, upd, F }) {
   );
 }
 
-function StepReview({ form }) {
-  const platLabel = PLATFORMS.find(p => p.value === form.device.platform_family)?.label || form.device.platform_family;
+function StepReview({ form, platforms }) {
+  const cur = platforms.find(p => p.id === form.device.platform_family);
+  const platLabel = cur?.name || form.device.platform_family;
+  const osLabel = versionLabel(cur?.os_family, form.device.os_version);
   const roleLabel = useMemo(() => ROLES.find(r => r.value === form.device.role)?.label, [form.device.role]);
   const dnsStr = useMemo(() => form.management.dns_servers.filter(Boolean).join(", "), [form.management.dns_servers]);
   const ntpCount = useMemo(() => form.services.ntp_servers.filter(Boolean).length, [form.services.ntp_servers]);
@@ -938,7 +970,7 @@ function StepReview({ form }) {
         <ReviewSection title="Device">
           <ReviewRow label="Project" value={form.name} />
           <ReviewRow label="Platform" value={platLabel} />
-          <ReviewRow label="OS" value={`IOS-XE ${form.device.os_version}`} />
+          <ReviewRow label="OS" value={osLabel} />
           <ReviewRow label="Hostname" value={form.device.hostname} mono />
           <ReviewRow label="Role" value={roleLabel} />
         </ReviewSection>

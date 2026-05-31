@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 
 const platformLabels = {
-  ie3300: "IE3300", ie3400: "IE3400", ie9320: "IE9320",
+  ie3300: "IE3300", ie3400: "IE3400", ie3100: "IE3100", ie9320: "IE9320",
   catalyst_9200: "Cat9200", catalyst_9300: "Cat9300", catalyst_9500: "Cat9500",
-  wlc_9800: "WLC9800",
+  wlc_9800: "WLC9800", c1200: "C1200",
 };
 
 const catLabels = {
