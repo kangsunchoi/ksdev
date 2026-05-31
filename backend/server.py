@@ -34,12 +34,15 @@ logger = logging.getLogger(__name__)
 # --- Startup: Seed data ---
 @app.on_event("startup")
 async def seed_database():
-    template_count = await db.templates.count_documents({})
-    if template_count == 0:
-        templates = get_seed_templates()
-        for t in templates:
-            await db.templates.insert_one(t)
-        logger.info(f"Seeded {len(templates)} templates")
+    # Re-seed system templates on every startup so backend seed_data.py stays the
+    # single source of truth. Only templates marked is_seed (and any legacy ones
+    # matching a seed name) are replaced; user-created templates are left intact.
+    templates = get_seed_templates()
+    seed_names = [t["name"] for t in templates]
+    await db.templates.delete_many({"$or": [{"is_seed": True}, {"name": {"$in": seed_names}}]})
+    for t in templates:
+        await db.templates.insert_one(t)
+    logger.info(f"Seeded/updated {len(templates)} system templates")
 
     project_count = await db.projects.count_documents({})
     if project_count == 0:
