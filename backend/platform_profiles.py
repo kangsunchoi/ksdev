@@ -10,6 +10,14 @@ Each platform_family has:
 
 IMPORTANT: If a feature is not explicitly listed as supported,
 it must be treated as "unsupported" or "needs verification".
+
+NOTE (version policy): supported_versions lists MAJOR IOS-XE trains only
+(e.g. "17.15"). Cisco-suggested maintenance builds (e.g. 17.15.4) are not
+tracked at the minor-build level here. EOL trains (17.3 / 17.6) were removed.
+
+NOTE (C1200): The Catalyst 1200 family is NOT IOS-XE. It runs its own
+small-business firmware (4.x) with a different CLI syntax, so os_family is
+"cisco_sb" and it must be rendered by a dedicated renderer (see config_renderer).
 """
 
 PLATFORM_FAMILIES = {
@@ -26,7 +34,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/25-1/0/26",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.9", "17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "L2-only platform. No IP routing. Designed for OT/industrial environments.",
     },
@@ -43,9 +51,26 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/25-1/0/28",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.9", "17.12", "17.15"],
         "trunk_encapsulation": False,
-        "notes": "L2/L3 industrial switch. L3 requires Network Advantage license.",
+        "notes": "L2/L3 industrial switch. L3 requires Network Advantage license. AVOID 17.9.4/17.9.5 (boot failure per Field Notice FN74245); use 17.12 or 17.15.",
+    },
+    "ie3100": {
+        "name": "Cisco IE3100",
+        "vendor": "cisco",
+        "os_family": "ios_xe",
+        "category": "industrial",
+        "layer": 3,
+        "description": "Compact rugged Industrial Ethernet L2/L3 switch",
+        "interface_prefix": "GigabitEthernet",
+        "default_port_range": "1/0/1-1/0/24",
+        "uplink_prefix": "GigabitEthernet",
+        "uplink_range": "1/0/25-1/0/26",
+        "mgig_capable": False,
+        "stacking": False,
+        "supported_versions": ["17.14", "17.15"],
+        "trunk_encapsulation": False,
+        "notes": "Newer rugged HW; supported from 17.14 onward (no older trains). L3 requires Network Advantage license.",
     },
     "ie9320": {
         "name": "Cisco IE9320",
@@ -60,7 +85,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.9", "17.12"],
+        "supported_versions": ["17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "Industrial L3 switch with enhanced capabilities.",
     },
@@ -77,7 +102,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": False,
         "stacking": True,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.9", "17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "L2/L3 campus switch. L3 requires DNA license.",
     },
@@ -94,7 +119,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": True,
         "stacking": True,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.9", "17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "Full-featured campus switch. Supports StackWise Virtual.",
     },
@@ -111,7 +136,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/2",
         "mgig_capable": True,
         "stacking": True,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.9", "17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "High-performance core/distribution switch.",
     },
@@ -128,9 +153,26 @@ PLATFORM_FAMILIES = {
         "uplink_range": "N/A",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.3", "17.6", "17.9", "17.12"],
+        "supported_versions": ["17.12", "17.15"],
         "trunk_encapsulation": False,
         "notes": "WLC config generation is limited in this release. Only basic management and WLAN profiles are supported.",
+    },
+    "c1200": {
+        "name": "Cisco Catalyst 1200",
+        "vendor": "cisco",
+        "os_family": "cisco_sb",
+        "category": "smb",
+        "layer": 2,
+        "description": "Small-business L2 managed switch (non IOS-XE)",
+        "interface_prefix": "GigabitEthernet",
+        "default_port_range": "1/0/1-1/0/24",
+        "uplink_prefix": "GigabitEthernet",
+        "uplink_range": "1/0/25-1/0/28",
+        "mgig_capable": False,
+        "stacking": False,
+        "supported_versions": ["4.1"],
+        "trunk_encapsulation": False,
+        "notes": "Cisco Small Business firmware (4.x), NOT IOS-XE. Dedicated renderer required. Interface = unit/slot/port with slot ALWAYS 0 (e.g. gi1/0/1; 'gi'/'GE' abbrev or full 'GigabitEthernet' both valid; standalone may write 'gi1'). VLANs created in 'vlan database' mode ('vlan N name X'). switchport mode access|trunk|general. No IP routing / HSRP / VRRP.",
     },
 }
 
@@ -146,6 +188,16 @@ FEATURE_SUPPORT = {
         "ssh", "banner", "line_vty", "line_console",
     },
     "ie3400": {
+        "hostname", "service_timestamps", "service_password_encryption",
+        "aaa_local", "aaa_radius", "local_users", "vlans", "access_ports", "trunk_ports",
+        "port_channel", "stp_rapid_pvst", "stp_portfast", "stp_bpduguard",
+        "mgmt_vlan", "mgmt_ip_l2", "mgmt_ip_svi", "default_gateway",
+        "svi", "static_routing", "ip_routing",
+        "dns", "domain_name", "ntp", "syslog", "snmp_v2c", "snmp_v3",
+        "ssh", "banner", "line_vty", "line_console",
+        "dhcp_relay",
+    },
+    "ie3100": {
         "hostname", "service_timestamps", "service_password_encryption",
         "aaa_local", "aaa_radius", "local_users", "vlans", "access_ports", "trunk_ports",
         "port_channel", "stp_rapid_pvst", "stp_portfast", "stp_bpduguard",
@@ -201,6 +253,14 @@ FEATURE_SUPPORT = {
         "snmp_v2c", "snmp_v3", "ssh", "banner", "line_vty", "line_console",
         "wlc_wlan", "wlc_policy_profile", "wlc_policy_tag",
     },
+    "c1200": {
+        "hostname", "service_password_encryption",
+        "aaa_local", "local_users", "vlans", "access_ports", "trunk_ports",
+        "port_channel", "stp_rapid_pvst", "stp_portfast", "stp_bpduguard",
+        "mgmt_vlan", "mgmt_ip_l2", "default_gateway",
+        "dns", "domain_name", "ntp", "syslog", "snmp_v2c", "snmp_v3",
+        "ssh", "banner", "line_vty", "line_console",
+    },
 }
 
 # Industrial protocol features - NOT modeled, must show as "needs verification"
@@ -221,10 +281,11 @@ DEVICE_ROLES = {
 
 # Role-platform compatibility
 ROLE_PLATFORM_MAP = {
-    "access_switch": ["ie3300", "ie3400", "catalyst_9200", "catalyst_9300"],
+    # c1200 enabled: dedicated C1200 (Small Business) renderer shipped in stage 3.
+    "access_switch": ["ie3300", "ie3400", "ie3100", "catalyst_9200", "catalyst_9300", "c1200"],
     "distribution_switch": ["ie3400", "ie9320", "catalyst_9300", "catalyst_9500"],
     "core_switch": ["catalyst_9500"],
-    "industrial_access": ["ie3300", "ie3400"],
+    "industrial_access": ["ie3300", "ie3400", "ie3100"],
     "industrial_distribution": ["ie3400", "ie9320"],
     "wlc": ["wlc_9800"],
 }
