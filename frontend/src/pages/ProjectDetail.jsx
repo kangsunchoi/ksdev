@@ -467,42 +467,47 @@ function formatDiffValue(v) {
   try { return JSON.stringify(v); } catch { return String(v); }
 }
 
+function diffLeaf(a, b, path) {
+  const ea = a === undefined || a === null || a === "";
+  const eb = b === undefined || b === null || b === "";
+  if (ea && eb) return null;
+  if (ea && !eb) return { kind: "add", path, before: "—", after: formatDiffValue(b) };
+  if (!ea && eb) return { kind: "remove", path, before: formatDiffValue(a), after: "—" };
+  if (formatDiffValue(a) !== formatDiffValue(b)) {
+    return { kind: "change", path, before: formatDiffValue(a), after: formatDiffValue(b) };
+  }
+  return null;
+}
+
 function buildProjectDiff(prev, curr) {
   const rows = [];
+
+  const walkObject = (a, b, path) => {
+    const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+    keys.forEach(k => {
+      if (DIFF_IGNORED_KEYS.has(k)) return;
+      walk(a?.[k], b?.[k], path ? `${path}.${k}` : k);
+    });
+  };
+
+  const walkArray = (a, b, path) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const max = Math.max(arrA.length, arrB.length);
+    for (let i = 0; i < max; i++) {
+      walk(arrA[i], arrB[i], `${path}[${i}]`);
+    }
+  };
+
   const walk = (a, b, path) => {
     const aIsObj = a && typeof a === "object" && !Array.isArray(a);
     const bIsObj = b && typeof b === "object" && !Array.isArray(b);
-    const aIsArr = Array.isArray(a);
-    const bIsArr = Array.isArray(b);
-
-    if (aIsObj && bIsObj) {
-      const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
-      keys.forEach(k => {
-        if (DIFF_IGNORED_KEYS.has(k)) return;
-        walk(a?.[k], b?.[k], path ? `${path}.${k}` : k);
-      });
-      return;
-    }
-    if (aIsArr || bIsArr) {
-      const arrA = aIsArr ? a : [];
-      const arrB = bIsArr ? b : [];
-      const max = Math.max(arrA.length, arrB.length);
-      for (let i = 0; i < max; i++) {
-        walk(arrA[i], arrB[i], `${path}[${i}]`);
-      }
-      return;
-    }
-    const ea = a === undefined || a === null || a === "";
-    const eb = b === undefined || b === null || b === "";
-    if (ea && eb) return;
-    if (ea && !eb) {
-      rows.push({ kind: "add", path, before: "—", after: formatDiffValue(b) });
-    } else if (!ea && eb) {
-      rows.push({ kind: "remove", path, before: formatDiffValue(a), after: "—" });
-    } else if (formatDiffValue(a) !== formatDiffValue(b)) {
-      rows.push({ kind: "change", path, before: formatDiffValue(a), after: formatDiffValue(b) });
-    }
+    if (aIsObj && bIsObj) { walkObject(a, b, path); return; }
+    if (Array.isArray(a) || Array.isArray(b)) { walkArray(a, b, path); return; }
+    const row = diffLeaf(a, b, path);
+    if (row) rows.push(row);
   };
+
   walk(prev || {}, curr || {}, "");
   return rows;
 }

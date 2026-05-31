@@ -139,56 +139,74 @@ def _validate_dns_servers(dns_servers: list) -> list:
     return findings
 
 
+def _validate_single_vlan(index: int, vlan: dict, seen_ids: set, seen_names: set) -> list:
+    """Validate one VLAN entry. Mutates seen_ids/seen_names. Returns findings for this entry."""
+    findings = []
+    vid = vlan.get("id")
+    vname = vlan.get("name", "")
+
+    if vid is None or vid == "":  # noqa: E711 - intentional None check + empty string check
+        findings.append({"severity": "error", "field": f"vlans[{index}].id", "message": f"VLAN at index {index} has no ID."})
+        return findings
+
+    try:
+        vid = int(vid)
+    except (ValueError, TypeError):
+        findings.append({"severity": "error", "field": f"vlans[{index}].id", "message": f"VLAN ID must be a number, got '{vid}'."})
+        return findings
+
+    if vid < 1 or vid > 4094:
+        findings.append({"severity": "error", "field": f"vlans[{index}].id", "message": f"VLAN ID {vid} out of range (1-4094)."})
+
+    if vid in seen_ids:
+        findings.append({"severity": "error", "field": f"vlans[{index}].id", "message": f"Duplicate VLAN ID: {vid}."})
+    seen_ids.add(vid)
+
+    if vname and vname.lower() in seen_names:
+        findings.append({"severity": "warning", "field": f"vlans[{index}].name", "message": f"Duplicate VLAN name: '{vname}'."})
+    if vname:
+        seen_names.add(vname.lower())
+
+    if not vname:
+        findings.append({"severity": "info", "field": f"vlans[{index}].name", "message": f"VLAN {vid} has no name. A descriptive name is recommended."})
+
+    return findings
+
+
+def _validate_mgmt_vlan_membership(mgmt: dict, vlans: list) -> list:
+    """Warn if the management VLAN is not present in the configured VLAN list."""
+    findings = []
+    mgmt_vlan = mgmt.get("mgmt_vlan")
+    if not (mgmt_vlan and vlans):
+        return findings
+
+    try:
+        mv = int(mgmt_vlan)
+    except (ValueError, TypeError):
+        return findings
+
+    vlan_ids = set()
+    for v in vlans:
+        try:
+            vlan_ids.add(int(v.get("id", 0)))
+        except (ValueError, TypeError):
+            pass
+
+    if mv not in vlan_ids and mv != 1:
+        findings.append({"severity": "warning", "field": "management.mgmt_vlan",
+                         "message": f"Management VLAN {mv} is not in the VLAN list. Add it to ensure it is created on the device."})
+    return findings
+
+
 def _validate_vlans(vlans: list, mgmt: dict) -> list:
     findings = []
     seen_ids = set()
     seen_names = set()
 
     for i, vlan in enumerate(vlans):
-        vid = vlan.get("id")
-        vname = vlan.get("name", "")
+        findings.extend(_validate_single_vlan(i, vlan, seen_ids, seen_names))
 
-        if vid is None or vid == "":  # noqa: E711 - intentional None check + empty string check
-            findings.append({"severity": "error", "field": f"vlans[{i}].id", "message": f"VLAN at index {i} has no ID."})
-            continue
-
-        try:
-            vid = int(vid)
-        except (ValueError, TypeError):
-            findings.append({"severity": "error", "field": f"vlans[{i}].id", "message": f"VLAN ID must be a number, got '{vid}'."})
-            continue
-
-        if vid < 1 or vid > 4094:
-            findings.append({"severity": "error", "field": f"vlans[{i}].id", "message": f"VLAN ID {vid} out of range (1-4094)."})
-
-        if vid in seen_ids:
-            findings.append({"severity": "error", "field": f"vlans[{i}].id", "message": f"Duplicate VLAN ID: {vid}."})
-        seen_ids.add(vid)
-
-        if vname and vname.lower() in seen_names:
-            findings.append({"severity": "warning", "field": f"vlans[{i}].name", "message": f"Duplicate VLAN name: '{vname}'."})
-        if vname:
-            seen_names.add(vname.lower())
-
-        if not vname:
-            findings.append({"severity": "info", "field": f"vlans[{i}].name", "message": f"VLAN {vid} has no name. A descriptive name is recommended."})
-
-    mgmt_vlan = mgmt.get("mgmt_vlan")
-    if mgmt_vlan and vlans:
-        try:
-            mv = int(mgmt_vlan)
-            vlan_ids = set()
-            for v in vlans:
-                try:
-                    vlan_ids.add(int(v.get("id", 0)))
-                except (ValueError, TypeError):
-                    pass
-            if mv not in vlan_ids and mv != 1:
-                findings.append({"severity": "warning", "field": "management.mgmt_vlan",
-                                 "message": f"Management VLAN {mv} is not in the VLAN list. Add it to ensure it is created on the device."})
-        except (ValueError, TypeError):
-            pass
-
+    findings.extend(_validate_mgmt_vlan_membership(mgmt, vlans))
     return findings
 
 
