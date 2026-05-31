@@ -55,6 +55,16 @@ function versionLabel(osFamily, v) {
   return osFamily === "cisco_sb" ? `Firmware ${v}` : `IOS-XE ${v}`;
 }
 
+// Field wrapper (label + control). Defined at module scope so it keeps a stable
+// component identity across re-renders. Defining it inside the page component
+// remounts every input on each keystroke and drops focus.
+const F = ({ label, children, className = "" }) => (
+  <div className={className}>
+    <Label className="text-xs text-zinc-400 mb-1 block">{label}</Label>
+    {children}
+  </div>
+);
+
 const uid = () => Math.random().toString(36).slice(2, 10);
 
 const defaultForm = () => ({
@@ -250,13 +260,6 @@ export default function NewProject() {
   };
 
   if (!loaded) return <div className="p-6 text-sm text-zinc-500">Loading project...</div>;
-
-  const F = ({ label, children, className = "" }) => (
-    <div className={className}>
-      <Label className="text-xs text-zinc-400 mb-1 block">{label}</Label>
-      {children}
-    </div>
-  );
 
   const renderStep = () => {
     switch (step) {
@@ -480,7 +483,7 @@ function AccessPortsSection({ form, addToArray, removeFromArray, updateArrayItem
       {form.interfaces.access_ports.map((p, i) => (
         <div key={p._uid || `ap-${i}`} className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`access-port-${i}`}>
           <F label={i === 0 ? "Interface" : ""}>
-            <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.access_ports", i, "interface", e.target.value)} placeholder="Gi1/0/1" />
+            <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.access_ports", i, "interface", e.target.value)} placeholder={form.device.os_family === "cisco_sb" ? "Gi1" : "Gi1/0/1"} />
           </F>
           <F label={i === 0 ? "VLAN" : ""}>
             <Input className="ncb-input font-mono" value={p.vlan} onChange={e => updateArrayItem("interfaces.access_ports", i, "vlan", e.target.value)} placeholder="10" />
@@ -513,7 +516,7 @@ function TrunkPortsSection({ form, addToArray, removeFromArray, updateArrayItem,
       {form.interfaces.trunk_ports.map((p, i) => (
         <div key={p._uid || `tp-${i}`} className="grid grid-cols-[1fr_1fr_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`trunk-port-${i}`}>
           <F label={i === 0 ? "Interface" : ""}>
-            <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.trunk_ports", i, "interface", e.target.value)} placeholder="Gi1/0/48" />
+            <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.trunk_ports", i, "interface", e.target.value)} placeholder={form.device.os_family === "cisco_sb" ? "Gi24" : "Gi1/0/48"} />
           </F>
           <F label={i === 0 ? "Allowed VLANs" : ""}>
             <Input className="ncb-input font-mono" value={p.allowed_vlans} onChange={e => updateArrayItem("interfaces.trunk_ports", i, "allowed_vlans", e.target.value)} placeholder="10,20,100" />
@@ -580,7 +583,7 @@ function PortChannelsSection({ form, addToArray, removeFromArray, updateArrayIte
           <F label="Members (comma-separated)">
             <Input className="ncb-input font-mono" value={Array.isArray(pc.members) ? pc.members.join(", ") : pc.members}
               onChange={e => updateArrayItem("interfaces.port_channels", i, "members", e.target.value.split(",").map(s => s.trim()))}
-              placeholder="Gi1/0/47, Gi1/0/48" />
+              placeholder={form.device.os_family === "cisco_sb" ? "Gi23, Gi24" : "Gi1/0/47, Gi1/0/48"} />
           </F>
           <F label="Description">
             <Input className="ncb-input" value={pc.description} onChange={e => updateArrayItem("interfaces.port_channels", i, "description", e.target.value)} placeholder="Uplink bundle" />
