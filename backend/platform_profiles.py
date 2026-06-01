@@ -34,7 +34,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/25-1/0/26",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.9", "17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "17.18", "26.1"],
         "trunk_encapsulation": False,
         "notes": "L2-only platform. No IP routing. Designed for OT/industrial environments.",
     },
@@ -51,7 +51,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/25-1/0/28",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.9", "17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "17.18", "26.1"],
         "trunk_encapsulation": False,
         "notes": "L2/L3 industrial switch. L3 requires Network Advantage license. AVOID 17.9.4/17.9.5 (boot failure per Field Notice FN74245); use 17.12 or 17.15.",
     },
@@ -68,7 +68,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/25-1/0/26",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.14", "17.15"],
+        "supported_versions": ["17.14", "17.15", "17.18", "26.1"],
         "trunk_encapsulation": False,
         "notes": "Newer rugged HW; supported from 17.14 onward (no older trains). L3 requires Network Advantage license.",
     },
@@ -85,7 +85,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "17.18", "26.1"],
         "trunk_encapsulation": False,
         "notes": "Industrial L3 switch with enhanced capabilities.",
     },
@@ -102,7 +102,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": False,
         "stacking": True,
-        "supported_versions": ["17.9", "17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "26.1"],
         "trunk_encapsulation": False,
         "notes": "L2/L3 campus switch. L3 requires DNA license.",
     },
@@ -119,7 +119,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/4",
         "mgig_capable": True,
         "stacking": True,
-        "supported_versions": ["17.9", "17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "26.1"],
         "trunk_encapsulation": False,
         "notes": "Full-featured campus switch. Supports StackWise Virtual.",
     },
@@ -136,7 +136,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "1/0/1-1/0/2",
         "mgig_capable": True,
         "stacking": True,
-        "supported_versions": ["17.9", "17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "26.1"],
         "trunk_encapsulation": False,
         "notes": "High-performance core/distribution switch.",
     },
@@ -153,7 +153,7 @@ PLATFORM_FAMILIES = {
         "uplink_range": "N/A",
         "mgig_capable": False,
         "stacking": False,
-        "supported_versions": ["17.12", "17.15"],
+        "supported_versions": ["17.12", "17.15", "26.1"],
         "trunk_encapsulation": False,
         "notes": "WLC config generation is limited in this release. Only basic management and WLAN profiles are supported.",
     },
@@ -173,6 +173,40 @@ PLATFORM_FAMILIES = {
         "supported_versions": ["4.1"],
         "trunk_encapsulation": False,
         "notes": "Cisco Small Business firmware (4.x), NOT IOS-XE. Dedicated renderer required. Interface = unit/slot/port with slot ALWAYS 0 (e.g. gi1/0/1; 'gi'/'GE' abbrev or full 'GigabitEthernet' both valid; standalone may write 'gi1'). VLANs created in 'vlan database' mode ('vlan N name X'). switchport mode access|trunk|general. No IP routing / HSRP / VRRP.",
+    },
+    "ie9310": {
+        "name": "Cisco IE9310",
+        "vendor": "cisco",
+        "os_family": "ios_xe",
+        "category": "industrial",
+        "layer": 3,
+        "description": "IE9300 rugged industrial switch, GE Fiber (same SW family as IE9320)",
+        "interface_prefix": "GigabitEthernet",
+        "default_port_range": "1/0/1-1/0/24",
+        "uplink_prefix": "TenGigabitEthernet",
+        "uplink_range": "1/0/1-1/0/2",
+        "mgig_capable": False,
+        "stacking": False,
+        "supported_versions": ["17.12", "17.15", "17.18", "26.1"],
+        "trunk_encapsulation": False,
+        "notes": "IE9300 Rugged Series (IE-9310-26S2C). Same software/features as IE9320.",
+    },
+    "ie3500": {
+        "name": "Cisco IE3500",
+        "vendor": "cisco",
+        "os_family": "ios_xe",
+        "category": "industrial",
+        "layer": 3,
+        "description": "Next-gen rugged industrial L2/L3 switch (IE3500/IE3505)",
+        "interface_prefix": "GigabitEthernet",
+        "default_port_range": "1/0/1-1/0/24",
+        "uplink_prefix": "GigabitEthernet",
+        "uplink_range": "1/0/25-1/0/28",
+        "mgig_capable": False,
+        "stacking": False,
+        "supported_versions": ["17.18", "26.1"],
+        "trunk_encapsulation": False,
+        "notes": "Next-gen rugged switch (from IOS-XE 17.18; 26.1 = year-based numbering). Supports MRP and Meraki cloud management.",
     },
 }
 
@@ -263,6 +297,9 @@ FEATURE_SUPPORT = {
     },
 }
 
+FEATURE_SUPPORT["ie9310"] = set(FEATURE_SUPPORT["ie9320"])
+FEATURE_SUPPORT["ie3500"] = set(FEATURE_SUPPORT["ie3400"])
+
 # Industrial protocol features - NOT modeled, must show as "needs verification"
 UNMODELED_INDUSTRIAL_FEATURES = {
     "prp", "hsr", "rep", "mrp", "ptp", "cip", "profinet",
@@ -282,11 +319,11 @@ DEVICE_ROLES = {
 # Role-platform compatibility
 ROLE_PLATFORM_MAP = {
     # c1200 enabled: dedicated C1200 (Small Business) renderer shipped in stage 3.
-    "access_switch": ["ie3300", "ie3400", "ie3100", "catalyst_9200", "catalyst_9300", "c1200"],
-    "distribution_switch": ["ie3400", "ie9320", "catalyst_9300", "catalyst_9500"],
+    "access_switch": ["ie3300", "ie3400", "ie3100", "ie3500", "catalyst_9200", "catalyst_9300", "c1200"],
+    "distribution_switch": ["ie3400", "ie9320", "ie9310", "catalyst_9300", "catalyst_9500"],
     "core_switch": ["catalyst_9500"],
-    "industrial_access": ["ie3300", "ie3400", "ie3100"],
-    "industrial_distribution": ["ie3400", "ie9320"],
+    "industrial_access": ["ie3300", "ie3400", "ie3100", "ie3500"],
+    "industrial_distribution": ["ie3400", "ie9320", "ie9310", "ie3500"],
     "wlc": ["wlc_9800"],
 }
 
