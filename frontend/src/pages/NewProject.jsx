@@ -30,6 +30,8 @@ const DEFAULT_RSA_KEY_BITS = 2048;
 // Platform and version data now come from the backend (/api/platforms) so the
 // New Config screen stays in sync with backend platform_profiles.py automatically.
 // Ordered category groups for the platform dropdown.
+const ERRDISABLE_CAUSES = ["bpduguard", "psecure-violation", "security-violation", "link-flap", "udld", "storm-control", "channel-misconfig", "loopback", "dhcp-rate-limit"];
+
 const PLATFORM_GROUPS = [
   ["industrial", "Industrial"],
   ["campus", "Campus"],
@@ -75,9 +77,10 @@ const defaultForm = () => ({
   interfaces: { access_ports: [], trunk_ports: [], port_channels: [] },
   routing: { svi_list: [], static_routes: [] },
   stp: { mode: "rapid-pvst", priority: {} },
+  errdisable: { causes: [], interval: "" },
   services: { ntp_servers: [""], syslog_servers: [""], snmp: { version: "", community: "", v3_user: "", v3_auth_protocol: "", v3_auth_password: "", v3_priv_protocol: "", v3_priv_password: "" }, dhcp_relay: [] },
   security: { aaa: { enabled: true, method: "local", radius_servers: [] }, local_users: [{ username: "", privilege: DEFAULT_PRIVILEGE_LEVEL, secret_type: "9" }], ssh: { version: 2, timeout: 60, retries: 3, rsa_bits: DEFAULT_RSA_KEY_BITS }, banner: "", line_vty: { transport: "ssh", access_class: "" } },
-  industrial: { panel_name: "", cabinet_name: "", peer_role: "none", uplink_role: "", ring_link_role: "", multicast_relevance: "", industrial_notes: "" },
+  industrial: { panel_name: "", cabinet_name: "", peer_role: "none", uplink_role: "", ring_link_role: "", multicast_relevance: "", industrial_notes: "", redundancy: { protocol: "none", hsr: {}, prp: {}, hsr_prp: {}, rep: {}, mrp: {} }, ptp: { enabled: false, mode: "e2etransparent", disabled_ports: [] } },
   notes: "",
 });
 
@@ -142,10 +145,10 @@ function useProjectForm(id, navigate) {
   const addToArray = (path) => {
     const templates = {
       vlans: { id: "", name: "", description: "" },
-      "interfaces.access_ports": { interface: "", vlan: "", voice_vlan: "", description: "", mode: "access" },
+      "interfaces.access_ports": { interface: "", vlan: "", voice_vlan: "", description: "", mode: "access", port_security: { enabled: false, max: "", violation: "restrict", sticky: false } },
       "interfaces.trunk_ports": { interface: "", allowed_vlans: "", native_vlan: "", description: "" },
       "interfaces.port_channels": { id: "", members: [], mode: "trunk", protocol: "lacp", allowed_vlans: "", description: "" },
-      "routing.svi_list": { vlan: "", ip: "", mask: "255.255.255.0", description: "" },
+      "routing.svi_list": { vlan: "", ip: "", mask: "255.255.255.0", description: "", fhrp: { type: "none", group: "", vip: "", priority: "", preempt: true, hello: "", hold: "" } },
       "routing.static_routes": { network: "", mask: "", next_hop: "" },
       "services.dhcp_relay": { svi_vlan: "", helper_ip: "" },
       "security.local_users": { username: "", privilege: DEFAULT_PRIVILEGE_LEVEL, secret_type: "9" },
@@ -177,7 +180,14 @@ function useProjectForm(id, navigate) {
       const keys = path.split(".");
       let obj = next;
       for (const k of keys) obj = obj[k];
-      obj[idx][field] = value;
+      // field may be a dotted path (e.g. "port_security.max") for nested objects
+      const fk = field.split(".");
+      let t = obj[idx];
+      for (let i = 0; i < fk.length - 1; i++) {
+        if (t[fk[i]] == null || typeof t[fk[i]] !== "object") t[fk[i]] = {};
+        t = t[fk[i]];
+      }
+      t[fk[fk.length - 1]] = value;
       return next;
     });
   };
@@ -481,22 +491,49 @@ function AccessPortsSection({ form, addToArray, removeFromArray, updateArrayItem
         </Button>
       </div>
       {form.interfaces.access_ports.map((p, i) => (
-        <div key={p._uid || `ap-${i}`} className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 items-end mb-2" data-testid={`access-port-${i}`}>
-          <F label={i === 0 ? "Interface" : ""}>
-            <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.access_ports", i, "interface", e.target.value)} placeholder={form.device.os_family === "cisco_sb" ? "Gi1" : "Gi1/0/1"} />
-          </F>
-          <F label={i === 0 ? "VLAN" : ""}>
-            <Input className="ncb-input font-mono" value={p.vlan} onChange={e => updateArrayItem("interfaces.access_ports", i, "vlan", e.target.value)} placeholder="10" />
-          </F>
-          <F label={i === 0 ? "Voice" : ""}>
-            <Input className="ncb-input font-mono" value={p.voice_vlan || ""} onChange={e => updateArrayItem("interfaces.access_ports", i, "voice_vlan", e.target.value)} placeholder="20" />
-          </F>
-          <F label={i === 0 ? "Description" : ""}>
-            <Input className="ncb-input" value={p.description} onChange={e => updateArrayItem("interfaces.access_ports", i, "description", e.target.value)} placeholder="PC Port" />
-          </F>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("interfaces.access_ports", i)}>
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+        <div key={p._uid || `ap-${i}`} className="mb-2">
+          <div className="grid grid-cols-[1fr_80px_80px_1fr_32px] gap-2 items-end" data-testid={`access-port-${i}`}>
+            <F label={i === 0 ? "Interface" : ""}>
+              <Input className="ncb-input font-mono" value={p.interface} onChange={e => updateArrayItem("interfaces.access_ports", i, "interface", e.target.value)} placeholder={form.device.os_family === "cisco_sb" ? "Gi1" : "Gi1/0/1"} />
+            </F>
+            <F label={i === 0 ? "VLAN" : ""}>
+              <Input className="ncb-input font-mono" value={p.vlan} onChange={e => updateArrayItem("interfaces.access_ports", i, "vlan", e.target.value)} placeholder="10" />
+            </F>
+            <F label={i === 0 ? "Voice" : ""}>
+              <Input className="ncb-input font-mono" value={p.voice_vlan || ""} onChange={e => updateArrayItem("interfaces.access_ports", i, "voice_vlan", e.target.value)} placeholder="20" />
+            </F>
+            <F label={i === 0 ? "Description" : ""}>
+              <Input className="ncb-input" value={p.description} onChange={e => updateArrayItem("interfaces.access_ports", i, "description", e.target.value)} placeholder="PC Port" />
+            </F>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("interfaces.access_ports", i)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-3 mt-1 pl-1 text-[11px] text-zinc-400">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="checkbox" checked={!!(p.port_security && p.port_security.enabled)}
+                onChange={e => updateArrayItem("interfaces.access_ports", i, "port_security.enabled", e.target.checked)} />
+              Port Security
+            </label>
+            {p.port_security && p.port_security.enabled && (
+              <>
+                <span className="text-zinc-600">max</span>
+                <input type="number" min={1} className="ncb-input font-mono w-14 h-6 px-1 text-[11px]" value={p.port_security.max || ""}
+                  onChange={e => updateArrayItem("interfaces.access_ports", i, "port_security.max", e.target.value)} placeholder="2" />
+                <select className="ncb-input h-6 px-1 text-[11px]" value={p.port_security.violation || "restrict"}
+                  onChange={e => updateArrayItem("interfaces.access_ports", i, "port_security.violation", e.target.value)}>
+                  <option value="restrict">restrict</option>
+                  <option value="protect">protect</option>
+                  <option value="shutdown">shutdown</option>
+                </select>
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="checkbox" checked={!!p.port_security.sticky}
+                    onChange={e => updateArrayItem("interfaces.access_ports", i, "port_security.sticky", e.target.checked)} />
+                  sticky
+                </label>
+              </>
+            )}
+          </div>
         </div>
       ))}
       {form.interfaces.access_ports.length === 0 && <div className="text-xs text-zinc-600 py-2">No access ports configured.</div>}
@@ -633,22 +670,51 @@ function SviSection({ form, addToArray, removeFromArray, updateArrayItem, F }) {
         </Button>
       </div>
       {form.routing.svi_list.map((svi, i) => (
-        <div key={svi._uid || `svi-${i}`} className="grid grid-cols-[80px_1fr_1fr_1fr_32px] gap-2 items-end mb-2">
-          <F label={i === 0 ? "VLAN" : ""}>
-            <Input className="ncb-input font-mono" value={svi.vlan} onChange={e => updateArrayItem("routing.svi_list", i, "vlan", e.target.value)} placeholder="10" />
-          </F>
-          <F label={i === 0 ? "IP Address" : ""}>
-            <Input className="ncb-input font-mono" value={svi.ip} onChange={e => updateArrayItem("routing.svi_list", i, "ip", e.target.value)} placeholder="10.1.10.1" />
-          </F>
-          <F label={i === 0 ? "Mask" : ""}>
-            <Input className="ncb-input font-mono" value={svi.mask} onChange={e => updateArrayItem("routing.svi_list", i, "mask", e.target.value)} placeholder="255.255.255.0" />
-          </F>
-          <F label={i === 0 ? "Description" : ""}>
-            <Input className="ncb-input" value={svi.description} onChange={e => updateArrayItem("routing.svi_list", i, "description", e.target.value)} placeholder="Data GW" />
-          </F>
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("routing.svi_list", i)}>
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+        <div key={svi._uid || `svi-${i}`} className="mb-2">
+          <div className="grid grid-cols-[80px_1fr_1fr_1fr_32px] gap-2 items-end">
+            <F label={i === 0 ? "VLAN" : ""}>
+              <Input className="ncb-input font-mono" value={svi.vlan} onChange={e => updateArrayItem("routing.svi_list", i, "vlan", e.target.value)} placeholder="10" />
+            </F>
+            <F label={i === 0 ? "IP Address" : ""}>
+              <Input className="ncb-input font-mono" value={svi.ip} onChange={e => updateArrayItem("routing.svi_list", i, "ip", e.target.value)} placeholder="10.1.10.1" />
+            </F>
+            <F label={i === 0 ? "Mask" : ""}>
+              <Input className="ncb-input font-mono" value={svi.mask} onChange={e => updateArrayItem("routing.svi_list", i, "mask", e.target.value)} placeholder="255.255.255.0" />
+            </F>
+            <F label={i === 0 ? "Description" : ""}>
+              <Input className="ncb-input" value={svi.description} onChange={e => updateArrayItem("routing.svi_list", i, "description", e.target.value)} placeholder="Data GW" />
+            </F>
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => removeFromArray("routing.svi_list", i)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+          <div className="flex items-center gap-2 mt-1 pl-1 text-[11px] text-zinc-400 flex-wrap">
+            <span className="text-zinc-600">FHRP</span>
+            <select className="ncb-input h-6 px-1 text-[11px]" value={(svi.fhrp && svi.fhrp.type) || "none"}
+              onChange={e => updateArrayItem("routing.svi_list", i, "fhrp.type", e.target.value)}>
+              <option value="none">none</option>
+              <option value="hsrp">HSRP</option>
+              <option value="vrrp">VRRP</option>
+            </select>
+            {svi.fhrp && svi.fhrp.type && svi.fhrp.type !== "none" && (
+              <>
+                <span className="text-zinc-600">grp</span>
+                <input type="number" min={0} className="ncb-input font-mono w-12 h-6 px-1 text-[11px]" value={svi.fhrp.group || ""}
+                  onChange={e => updateArrayItem("routing.svi_list", i, "fhrp.group", e.target.value)} placeholder="1" />
+                <span className="text-zinc-600">VIP</span>
+                <input className="ncb-input font-mono w-28 h-6 px-1 text-[11px]" value={svi.fhrp.vip || ""}
+                  onChange={e => updateArrayItem("routing.svi_list", i, "fhrp.vip", e.target.value)} placeholder="10.1.10.254" />
+                <span className="text-zinc-600">pri</span>
+                <input type="number" className="ncb-input font-mono w-14 h-6 px-1 text-[11px]" value={svi.fhrp.priority || ""}
+                  onChange={e => updateArrayItem("routing.svi_list", i, "fhrp.priority", e.target.value)} placeholder="110" />
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input type="checkbox" checked={svi.fhrp.preempt !== false}
+                    onChange={e => updateArrayItem("routing.svi_list", i, "fhrp.preempt", e.target.checked)} />
+                  preempt
+                </label>
+              </>
+            )}
+          </div>
         </div>
       ))}
       {form.routing.svi_list.length === 0 && <div className="text-xs text-zinc-600 py-2">No SVIs configured. Required for inter-VLAN routing on L3 platforms.</div>}
@@ -899,6 +965,30 @@ function StepSecurity({ form, upd, F, addToArray, removeFromArray, updateArrayIt
       </div>
 
       <div className="border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-1">Errdisable Recovery</h3>
+        <p className="text-[11px] text-zinc-600 mb-3">Auto-recover ports disabled by these causes (IOS-XE switches; ignored on C1200/WLC).</p>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {ERRDISABLE_CAUSES.map(c => {
+            const on = (form.errdisable.causes || []).includes(c);
+            return (
+              <button key={c} type="button" data-testid={`errd-${c}`}
+                onClick={() => {
+                  const cur = form.errdisable.causes || [];
+                  upd("errdisable.causes", on ? cur.filter(x => x !== c) : [...cur, c]);
+                }}
+                className={`px-2 py-1 rounded text-[11px] border transition-colors ${on ? "bg-blue-500/20 border-blue-500 text-blue-300" : "border-border text-zinc-500 hover:text-zinc-300"}`}>
+                {c}
+              </button>
+            );
+          })}
+        </div>
+        <F label="Recovery interval (seconds)">
+          <Input className="ncb-input font-mono w-32" type="number" value={form.errdisable.interval}
+            onChange={e => upd("errdisable.interval", e.target.value)} placeholder="300" data-testid="input-errd-interval" />
+        </F>
+      </div>
+
+      <div className="border-t border-border pt-4">
         <F label="Project Notes (optional)">
           <Textarea className="text-sm bg-transparent min-h-[60px]" value={form.notes} onChange={e => upd("notes", e.target.value)}
             placeholder="Any additional notes for this configuration..." data-testid="input-notes" />
@@ -950,9 +1040,111 @@ function StepIndustrial({ form, upd, F }) {
         <Textarea className="text-sm bg-transparent min-h-[60px]" value={form.industrial.industrial_notes} onChange={e => upd("industrial.industrial_notes", e.target.value)}
           placeholder="Floor-level access switch near MCC panel" data-testid="input-industrial-notes" />
       </F>
-      <div className="p-3 border border-amber-500/20 bg-amber-500/5 rounded-sm text-xs text-amber-400">
-        <AlertTriangle className="w-3.5 h-3.5 inline mr-1.5" />
-        PRP, HSR, REP, MRP, PTP, CIP, PROFINET, Modbus TCP, DLR, RedBox are NOT modeled in this release. If these protocols are required, manual verification and configuration is needed.
+      <div className="border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-1">Ring / Redundancy Protocol</h3>
+        <p className="text-[11px] text-zinc-600 mb-3">Select one ring/redundancy protocol. Hardware-dependent — unsupported choices are flagged in the generated config.</p>
+        <F label="Protocol" className="w-56">
+          <Select value={form.industrial.redundancy?.protocol || "none"} onValueChange={v => upd("industrial.redundancy.protocol", v)}>
+            <SelectTrigger className="ncb-select-trigger" data-testid="select-ring-proto"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="hsr">HSR (seamless ring)</SelectItem>
+              <SelectItem value="prp">PRP (parallel)</SelectItem>
+              <SelectItem value="hsr_prp">HSR-PRP RedBox</SelectItem>
+              <SelectItem value="rep">REP</SelectItem>
+              <SelectItem value="mrp">MRP</SelectItem>
+            </SelectContent>
+          </Select>
+        </F>
+        {(form.industrial.redundancy?.protocol === "hsr" || form.industrial.redundancy?.protocol === "hsr_prp") && (
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            <F label="Ring ID"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.hsr?.ring_id || ""} onChange={e => upd("industrial.redundancy.hsr.ring_id", e.target.value)} placeholder="1" /></F>
+            <F label="VLAN"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.hsr?.vlan || ""} onChange={e => upd("industrial.redundancy.hsr.vlan", e.target.value)} placeholder="13" /></F>
+            <F label="Ring Port 1"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.hsr?.port1 || ""} onChange={e => upd("industrial.redundancy.hsr.port1", e.target.value)} placeholder="Gi1/1" /></F>
+            <F label="Ring Port 2"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.hsr?.port2 || ""} onChange={e => upd("industrial.redundancy.hsr.port2", e.target.value)} placeholder="Gi1/2" /></F>
+          </div>
+        )}
+        {form.industrial.redundancy?.protocol === "hsr_prp" && (
+          <div className="grid grid-cols-4 gap-2 mt-2">
+            <F label="PRP LAN">
+              <Select value={form.industrial.redundancy?.hsr_prp?.prp_lan || "a"} onValueChange={v => upd("industrial.redundancy.hsr_prp.prp_lan", v)}>
+                <SelectTrigger className="ncb-select-trigger"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="a">LAN-A</SelectItem><SelectItem value="b">LAN-B</SelectItem></SelectContent>
+              </Select>
+            </F>
+            <F label="Instance"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.hsr_prp?.instance || ""} onChange={e => upd("industrial.redundancy.hsr_prp.instance", e.target.value)} placeholder="1" /></F>
+          </div>
+        )}
+        {form.industrial.redundancy?.protocol === "prp" && (
+          <div className="grid grid-cols-4 gap-2 mt-3">
+            <F label="Channel ID"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.prp?.channel_id || ""} onChange={e => upd("industrial.redundancy.prp.channel_id", e.target.value)} placeholder="1" /></F>
+            <F label="VLAN"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.prp?.vlan || ""} onChange={e => upd("industrial.redundancy.prp.vlan", e.target.value)} placeholder="13" /></F>
+            <F label="LAN-A Port"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.prp?.lan_a || ""} onChange={e => upd("industrial.redundancy.prp.lan_a", e.target.value)} placeholder="Gi1/0/9" /></F>
+            <F label="LAN-B Port"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.prp?.lan_b || ""} onChange={e => upd("industrial.redundancy.prp.lan_b", e.target.value)} placeholder="Gi1/0/10" /></F>
+          </div>
+        )}
+        {form.industrial.redundancy?.protocol === "rep" && (
+          <div className="space-y-2 mt-3">
+            <div className="grid grid-cols-4 gap-2">
+              <F label="Segment"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.segment || ""} onChange={e => upd("industrial.redundancy.rep.segment", e.target.value)} placeholder="1" /></F>
+              <F label="Admin VLAN"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.admin_vlan || ""} onChange={e => upd("industrial.redundancy.rep.admin_vlan", e.target.value)} placeholder="100" /></F>
+              <F label="LSL Retries"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.lsl_retries || ""} onChange={e => upd("industrial.redundancy.rep.lsl_retries", e.target.value)} placeholder="3" /></F>
+              <F label="LSL Age (ms)"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.lsl_age || ""} onChange={e => upd("industrial.redundancy.rep.lsl_age", e.target.value)} placeholder="3000" /></F>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              <F label="Port 1"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.port1 || ""} onChange={e => upd("industrial.redundancy.rep.port1", e.target.value)} placeholder="Gi1/1" /></F>
+              <F label="Role 1">
+                <Select value={form.industrial.redundancy?.rep?.port1_role || "edge_primary"} onValueChange={v => upd("industrial.redundancy.rep.port1_role", v)}>
+                  <SelectTrigger className="ncb-select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="edge_primary">edge primary</SelectItem><SelectItem value="edge">edge</SelectItem><SelectItem value="intermediate">intermediate</SelectItem></SelectContent>
+                </Select>
+              </F>
+              <F label="Port 2"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.rep?.port2 || ""} onChange={e => upd("industrial.redundancy.rep.port2", e.target.value)} placeholder="Gi1/2" /></F>
+              <F label="Role 2">
+                <Select value={form.industrial.redundancy?.rep?.port2_role || "edge"} onValueChange={v => upd("industrial.redundancy.rep.port2_role", v)}>
+                  <SelectTrigger className="ncb-select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="edge_primary">edge primary</SelectItem><SelectItem value="edge">edge</SelectItem><SelectItem value="intermediate">intermediate</SelectItem></SelectContent>
+                </Select>
+              </F>
+            </div>
+          </div>
+        )}
+        {form.industrial.redundancy?.protocol === "mrp" && (
+          <div className="mt-3">
+            <div className="grid grid-cols-4 gap-2">
+              <F label="Ring ID"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.mrp?.ring_id || ""} onChange={e => upd("industrial.redundancy.mrp.ring_id", e.target.value)} placeholder="1" /></F>
+              <F label="Role">
+                <Select value={form.industrial.redundancy?.mrp?.role || "client"} onValueChange={v => upd("industrial.redundancy.mrp.role", v)}>
+                  <SelectTrigger className="ncb-select-trigger"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="manager">Manager (MRM)</SelectItem><SelectItem value="client">Client (MRC)</SelectItem><SelectItem value="auto">Auto-manager (MRA)</SelectItem></SelectContent>
+                </Select>
+              </F>
+              <F label="Port 1"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.mrp?.port1 || ""} onChange={e => upd("industrial.redundancy.mrp.port1", e.target.value)} placeholder="Gi1/1" /></F>
+              <F label="Port 2"><Input className="ncb-input font-mono" value={form.industrial.redundancy?.mrp?.port2 || ""} onChange={e => upd("industrial.redundancy.mrp.port2", e.target.value)} placeholder="Gi1/2" /></F>
+            </div>
+            <p className="text-[11px] text-amber-400/80 mt-1">MRP CLI mode requires PROFINET MRP to be disabled first on the device.</p>
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-2">PTP (Precision Time Protocol)</h3>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer">
+            <input type="checkbox" checked={!!form.industrial.ptp?.enabled} onChange={e => upd("industrial.ptp.enabled", e.target.checked)} />
+            Enable PTP
+          </label>
+          {form.industrial.ptp?.enabled && (
+            <Select value={form.industrial.ptp?.mode || "e2etransparent"} onValueChange={v => upd("industrial.ptp.mode", v)}>
+              <SelectTrigger className="ncb-select-trigger w-52"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="e2etransparent">e2e-transparent</SelectItem>
+                <SelectItem value="p2ptransparent">p2p-transparent</SelectItem>
+                <SelectItem value="boundary">boundary</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
     </div>
   );

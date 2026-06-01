@@ -48,9 +48,12 @@ class ConfigRenderer:
         self._domain_dns()
         self._vlans()
         self._stp()
+        self._errdisable()
         self._interfaces_access()
         self._interfaces_trunk()
         self._port_channels()
+        self._industrial_redundancy()
+        self._ptp()
         self._svi()
         self._routing()
         self._management_interface()
@@ -218,6 +221,21 @@ class ConfigRenderer:
                 self._add(f"spanning-tree vlan {vid} priority {pri}", f"STP priority for VLAN {vid}")
             self.checklist.append({"section": "STP", "item": f"Confirm STP mode '{mode}' matches the network-wide standard", "type": "confirmation"})
 
+    def _errdisable(self):
+        ed = self.project.get("errdisable", {})
+        if not is_feature_supported(self.platform, "errdisable"):
+            return
+        causes = ed.get("causes", []) or []
+        interval = ed.get("interval")
+        if not causes and not interval:
+            return
+        self._add_section("ERRDISABLE RECOVERY")
+        for c in causes:
+            self._add(f"errdisable recovery cause {c}", f"Auto-recover ports err-disabled by '{c}'")
+        if interval:
+            self._add(f"errdisable recovery interval {interval}", f"Recovery retry interval: {interval}s")
+        self.checklist.append({"section": "Errdisable", "item": "Confirm err-disable recovery causes and interval", "type": "confirmation"})
+
     def _interfaces_access(self):
         ports = self.interfaces.get("access_ports", [])
         if not ports:
@@ -243,6 +261,15 @@ class ConfigRenderer:
                 self._add(" spanning-tree portfast")
             if is_feature_supported(self.platform, "stp_bpduguard"):
                 self._add(" spanning-tree bpduguard enable")
+            ps = port.get("port_security", {})
+            if ps.get("enabled") and is_feature_supported(self.platform, "port_security"):
+                self._add(" switchport port-security", "Port security: limit MAC addresses on this port")
+                if ps.get("max"):
+                    self._add(f" switchport port-security maximum {ps['max']}")
+                if ps.get("violation"):
+                    self._add(f" switchport port-security violation {ps['violation']}")
+                if ps.get("sticky"):
+                    self._add(" switchport port-security mac-address sticky")
             self._add(" no shutdown")
 
     def _interfaces_trunk(self):
@@ -318,6 +345,167 @@ class ConfigRenderer:
                 self._add(f" switchport access vlan {vlan}")
         self._add(" no shutdown")
 
+    def _industrial_redundancy(self):
+        """Industrial ring/redundancy: HSR, PRP, HSR-PRP RedBox (REP/MRP added separately)."""
+        red = self.industrial.get("redundancy", {}) if isinstance(self.industrial, dict) else {}
+        proto = (red.get("protocol") or "none").lower()
+        if proto in ("none", ""):
+            return
+        if proto == "hsr":
+            self._render_hsr(red.get("hsr", {}))
+        elif proto == "prp":
+            self._render_prp(red.get("prp", {}))
+        elif proto == "hsr_prp":
+            self._render_hsr_prp(red.get("hsr_prp", {}), red.get("hsr", {}))
+        elif proto == "rep":
+            self._render_rep(red.get("rep", {}))
+        elif proto == "mrp":
+            self._render_mrp(red.get("mrp", {}))
+
+    def _render_hsr(self, hsr):
+        if not is_feature_supported(self.platform, "hsr"):
+            self.annotated_lines.append("! WARNING: HSR not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "HSR", "item": "HSR requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        ring = hsr.get("ring_id", 1)
+        vlan = hsr.get("vlan", "")
+        p1 = (hsr.get("port1") or "").strip()
+        p2 = (hsr.get("port2") or "").strip()
+        if not (p1 and p2):
+            return
+        self._add_section("HSR (HIGH-AVAILABILITY SEAMLESS REDUNDANCY)")
+        self._add(f"interface HSR-ring{ring}", f"HSR ring {ring} logical interface")
+        if vlan:
+            self._add(f" switchport access vlan {vlan}")
+            self._add(" switchport mode access")
+        for i, p in enumerate([p1, p2], 1):
+            self._add(f"interface {p}", f"HSR ring {ring} member port {i}")
+            self._add(f" description HSR_RING_PORT_{i}")
+            if vlan:
+                self._add(f" switchport access vlan {vlan}")
+                self._add(" switchport mode access")
+            self._add(" no ptp enable", "PTP disabled on HSR ring ports (per Cisco guidance)")
+        self.checklist.append({"section": "HSR", "item": f"Verify HSR ring {ring} ports ({p1}, {p2}) match the ring neighbors", "type": "confirmation"})
+
+    def _render_prp(self, prp):
+        if not is_feature_supported(self.platform, "prp"):
+            self.annotated_lines.append("! WARNING: PRP not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "PRP", "item": "PRP requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        ch = prp.get("channel_id", 1)
+        vlan = prp.get("vlan", "")
+        a = (prp.get("lan_a") or "").strip()
+        b = (prp.get("lan_b") or "").strip()
+        if not (a and b):
+            return
+        self._add_section("PRP (PARALLEL REDUNDANCY PROTOCOL)")
+        self._add(f"interface PRP-channel{ch}", f"PRP channel {ch} logical interface")
+        if vlan:
+            self._add(f" switchport access vlan {vlan}")
+            self._add(" switchport mode access")
+        self._add(" spanning-tree portfast trunk")
+        self._add(" spanning-tree bpdufilter enable")
+        for lan, p in [("A", a), ("B", b)]:
+            self._add(f"interface {p}", f"PRP channel {ch} member (LAN {lan})")
+            self._add(f" description PRP_LAN_{lan}")
+            self._add(" no keepalive")
+            self._add(f" prp-channel-group {ch}")
+        self.checklist.append({"section": "PRP", "item": f"Verify PRP channel {ch} LAN-A ({a}) / LAN-B ({b}) wiring", "type": "confirmation"})
+
+    def _render_hsr_prp(self, hp, hsr):
+        if not is_feature_supported(self.platform, "hsr_prp"):
+            self.annotated_lines.append("! WARNING: HSR-PRP RedBox not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "HSR-PRP", "item": "HSR-PRP RedBox requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        lan = (hp.get("prp_lan") or "a").lower()
+        inst = hp.get("instance", 1)
+        self._add_section("HSR-PRP REDBOX")
+        self._add(f"hsr-prp-mode enable prp-lan-{lan} {inst}", f"RedBox: couple HSR ring to PRP LAN-{lan.upper()}")
+        if hsr:
+            self._render_hsr(hsr)
+        self.checklist.append({"section": "HSR-PRP", "item": "Verify RedBox couples the HSR ring to the correct PRP LAN", "type": "confirmation"})
+
+    def _render_rep(self, rep):
+        if not is_feature_supported(self.platform, "rep"):
+            self.annotated_lines.append("! WARNING: REP not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "REP", "item": "REP requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        seg = rep.get("segment", 1)
+        admin_vlan = rep.get("admin_vlan", "")
+        lsl_r = rep.get("lsl_retries")
+        lsl_a = rep.get("lsl_age")
+        ports = rep.get("ports", [])
+        if not ports:
+            # UI fallback: build from simple port1/port2 fields
+            cand = [
+                {"intf": rep.get("port1", ""), "role": rep.get("port1_role", "edge_primary")},
+                {"intf": rep.get("port2", ""), "role": rep.get("port2_role", "edge")},
+            ]
+            ports = [p for p in cand if (p["intf"] or "").strip()]
+        if not ports:
+            return
+        self._add_section("REP (RESILIENT ETHERNET PROTOCOL)")
+        if admin_vlan:
+            self._add(f"rep admin vlan {admin_vlan}", "REP administrative VLAN")
+        for p in ports:
+            intf = (p.get("intf") or "").strip()
+            if not intf:
+                continue
+            role = (p.get("role") or "intermediate").lower()
+            seg_cmd = f" rep segment {seg}"
+            if role == "edge_primary":
+                seg_cmd += " edge primary"
+            elif role == "edge":
+                seg_cmd += " edge"
+            self._add(f"interface {intf}", f"REP segment {seg} port ({role})")
+            self._add(seg_cmd)
+            if lsl_r:
+                self._add(f" rep lsl-retries {lsl_r}")
+            if lsl_a:
+                self._add(f" rep lsl-age-timer {lsl_a}")
+        self.checklist.append({"section": "REP", "item": f"Verify REP segment {seg} edge roles and neighbor ports", "type": "confirmation"})
+
+    def _render_mrp(self, mrp):
+        if not is_feature_supported(self.platform, "mrp"):
+            self.annotated_lines.append("! WARNING: MRP not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "MRP", "item": "MRP requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        ring = mrp.get("ring_id", 1)
+        role = (mrp.get("role") or "client").lower()
+        p1 = (mrp.get("port1") or "").strip()
+        p2 = (mrp.get("port2") or "").strip()
+        if not (p1 and p2):
+            return
+        role_map = {"manager": "manager", "mrm": "manager", "client": "client", "mrc": "client",
+                    "auto": "automanager", "auto-manager": "automanager", "mra": "automanager"}
+        mode = role_map.get(role, "client")
+        self._add_section("MRP (MEDIA REDUNDANCY PROTOCOL)")
+        self.annotated_lines.append("! NOTE: MRP CLI mode requires PROFINET MRP to be disabled first on this device.")
+        self._add(f"mrp ring {ring}", f"MRP ring {ring}")
+        self._add(f" mode {mode}", f"MRP role: {mode} (IEC 62439-2)")
+        for p in (p1, p2):
+            self._add(f"interface {p}", f"MRP ring {ring} port")
+            self._add(f" mrp ring {ring}")
+        self.checklist.append({"section": "MRP", "item": f"Disable PROFINET MRP first; verify MRP ring {ring} role/ports", "type": "action_required"})
+
+    def _ptp(self):
+        ptp = self.industrial.get("ptp", {}) if isinstance(self.industrial, dict) else {}
+        if not ptp.get("enabled"):
+            return
+        if not is_feature_supported(self.platform, "ptp"):
+            self.annotated_lines.append("! WARNING: PTP not supported on this platform; verify hardware.")
+            self.checklist.append({"section": "PTP", "item": "PTP requested but platform may not support it. Verify model.", "type": "action_required"})
+            return
+        mode = ptp.get("mode", "e2etransparent")
+        self._add_section("PTP (PRECISION TIME PROTOCOL)")
+        self._add(f"ptp mode {mode}", f"PTP clock mode: {mode} (IEEE 1588)")
+        for p in ptp.get("disabled_ports", []):
+            p = (p or "").strip()
+            if p:
+                self._add(f"interface {p}")
+                self._add(" no ptp enable", "Disable PTP on this port")
+        self.checklist.append({"section": "PTP", "item": f"Verify PTP mode '{mode}' matches the time-sync design", "type": "confirmation"})
+
     def _svi(self):
         svis = self.routing.get("svi_list", [])
         if not svis:
@@ -330,6 +518,10 @@ class ConfigRenderer:
         self._add_section("SVI (INTER-VLAN ROUTING) INTERFACES")
         if is_feature_supported(self.platform, "ip_routing"):
             self._add("ip routing", "Enable IP routing for inter-VLAN traffic")
+        # VRRPv3 must be enabled globally if any SVI uses VRRP
+        uses_vrrp = any((s.get("fhrp", {}) or {}).get("type") == "vrrp" for s in svis)
+        if uses_vrrp and is_feature_supported(self.platform, "vrrp"):
+            self._add("fhrp version vrrp v3", "Enable VRRPv3 (modern address-family syntax)")
 
         for svi in svis:
             vid = svi.get("vlan", "")
@@ -341,9 +533,43 @@ class ConfigRenderer:
                 if desc:
                     self._add(f" description {desc}")
                 self._add(f" ip address {ip} {mask}")
+                self._render_fhrp(svi.get("fhrp", {}))
                 self._add(" no shutdown")
 
         self.checklist.append({"section": "SVIs", "item": "Verify SVI IP addresses match the IP addressing plan", "type": "confirmation"})
+
+    def _render_fhrp(self, fhrp):
+        """First-hop redundancy (HSRP or VRRP) inside an SVI."""
+        if not fhrp:
+            return
+        ftype = fhrp.get("type")
+        group = fhrp.get("group")
+        vip = (fhrp.get("vip") or "").strip()
+        if not group or not vip:
+            return
+        pri = fhrp.get("priority")
+        preempt = fhrp.get("preempt")
+        hello = fhrp.get("hello")
+        hold = fhrp.get("hold")
+        if ftype == "hsrp" and is_feature_supported(self.platform, "hsrp"):
+            self._add(f" standby {group} ip {vip}", f"HSRP group {group} virtual IP (gateway)")
+            if pri:
+                self._add(f" standby {group} priority {pri}", "Higher priority = active (default 100)")
+            if hello and hold:
+                self._add(f" standby {group} timers {hello} {hold}", "hello / hold timers (seconds)")
+            if preempt:
+                self._add(f" standby {group} preempt", "Reclaim active role when priority is higher")
+            self.checklist.append({"section": "FHRP", "item": f"Confirm HSRP group {group} VIP/priority match the redundant peer", "type": "confirmation"})
+        elif ftype == "vrrp" and is_feature_supported(self.platform, "vrrp"):
+            self._add(f" vrrp {group} address-family ipv4", f"VRRPv3 group {group}")
+            self._add(f"  address {vip}", "Virtual IP (gateway)")
+            if pri:
+                self._add(f"  priority {pri}", "Higher priority = master (default 100)")
+            if hello:
+                self._add(f"  timers advertise {hello}", "Advertisement interval (seconds)")
+            if preempt is False:
+                self._add("  no preempt", "Disable preemption (VRRP default is enabled)")
+            self.checklist.append({"section": "FHRP", "item": f"Confirm VRRP group {group} VIP/priority match the redundant peer", "type": "confirmation"})
 
     def _routing(self):
         routes = self.routing.get("static_routes", [])

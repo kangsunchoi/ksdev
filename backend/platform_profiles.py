@@ -300,6 +300,25 @@ FEATURE_SUPPORT = {
 FEATURE_SUPPORT["ie9310"] = set(FEATURE_SUPPORT["ie9320"])
 FEATURE_SUPPORT["ie3500"] = set(FEATURE_SUPPORT["ie3400"])
 
+# Track B features supported on all IOS-XE switches (not WLC / non-IOS-XE C1200).
+_IOSXE_SWITCHES = ["ie3300", "ie3400", "ie3100", "ie9320", "ie9310", "ie3500",
+                   "catalyst_9200", "catalyst_9300", "catalyst_9500"]
+for _m in _IOSXE_SWITCHES:
+    FEATURE_SUPPORT[_m] |= {"errdisable", "port_security"}
+
+# FHRP (HSRP / VRRP) on L3-capable (SVI) switches only.
+for _m in _IOSXE_SWITCHES:
+    if "svi" in FEATURE_SUPPORT[_m]:
+        FEATURE_SUPPORT[_m] |= {"hsrp", "vrrp"}
+
+# Industrial ring / redundancy protocols (hardware-dependent).
+# Based on field configs (IE3100 REP, IE3400 HSR/PRP/HSR-PRP, IE9320 PRP) + Cisco docs (MRP).
+FEATURE_SUPPORT["ie3100"] |= {"rep", "mrp", "ptp"}
+FEATURE_SUPPORT["ie3400"] |= {"hsr", "prp", "hsr_prp", "rep", "ptp"}
+FEATURE_SUPPORT["ie3500"] |= {"hsr", "prp", "rep", "mrp", "ptp"}
+FEATURE_SUPPORT["ie9320"] |= {"prp", "hsr", "ptp"}
+FEATURE_SUPPORT["ie9310"] |= {"prp", "hsr", "ptp"}
+
 # Industrial protocol features - NOT modeled, must show as "needs verification"
 UNMODELED_INDUSTRIAL_FEATURES = {
     "prp", "hsr", "rep", "mrp", "ptp", "cip", "profinet",
