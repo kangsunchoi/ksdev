@@ -1,14 +1,16 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, FilePlus2, Library, Server } from "lucide-react";
+import { LayoutDashboard, FilePlus2, Library, Server, Languages } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard", exact: true },
-  { to: "/projects/new", icon: FilePlus2, label: "New Config" },
-  { to: "/templates", icon: Library, label: "Templates" },
+  { to: "/", icon: LayoutDashboard, key: "nav.dashboard", testId: "dashboard", exact: true },
+  { to: "/projects/new", icon: FilePlus2, key: "nav.newConfig", testId: "new-config" },
+  { to: "/templates", icon: Library, key: "nav.templates", testId: "templates" },
 ];
 
 export const Sidebar = () => {
   const location = useLocation();
+  const { t, lang, setLang } = useI18n();
 
   return (
     <aside
@@ -31,7 +33,7 @@ export const Sidebar = () => {
             <NavLink
               key={item.to}
               to={item.to}
-              data-testid={`nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
+              data-testid={`nav-${item.testId}`}
               className={`flex items-center gap-2.5 px-3 py-2 rounded-sm text-sm font-medium btn-transition ${
                 isActive
                   ? "bg-blue-600/15 text-blue-400 border-l-2 border-blue-500"
@@ -39,16 +41,25 @@ export const Sidebar = () => {
               }`}
             >
               <item.icon className="w-4 h-4" />
-              {item.label}
+              {t(item.key)}
             </NavLink>
           );
         })}
       </nav>
 
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border space-y-2">
+        <button
+          type="button"
+          onClick={() => setLang(lang === "ko" ? "en" : "ko")}
+          data-testid="lang-toggle"
+          className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-sm text-xs font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 border border-border btn-transition"
+        >
+          <Languages className="w-3.5 h-3.5" />
+          {t("lang.toggle")}
+        </button>
         <div className="text-[11px] text-zinc-600 leading-tight">
           NetConfig Builder v1.0<br />
-          Cisco IOS-XE Config Tool
+          {t("sidebar.subtitle")}
         </div>
       </div>
     </aside>

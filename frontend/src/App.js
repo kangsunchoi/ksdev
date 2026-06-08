@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/Sidebar";
+import { I18nProvider } from "@/lib/i18n";
 import Dashboard from "@/pages/Dashboard";
 import NewProject from "@/pages/NewProject";
 import ProjectDetail from "@/pages/ProjectDetail";
@@ -10,7 +11,8 @@ import TemplateLibrary from "@/pages/TemplateLibrary";
 
 function App() {
   return (
-    <TooltipProvider delayDuration={200}>
+    <I18nProvider>
+      <TooltipProvider delayDuration={200}>
       <BrowserRouter>
         <div className="flex h-screen bg-background overflow-hidden">
           <Sidebar />
@@ -27,6 +29,7 @@ function App() {
         <Toaster theme="dark" position="top-right" richColors closeButton />
       </BrowserRouter>
     </TooltipProvider>
+    </I18nProvider>
   );
 }
 

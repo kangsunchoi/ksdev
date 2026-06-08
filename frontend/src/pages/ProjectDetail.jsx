@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,6 +25,7 @@ const platformLabels = {
 };
 
 export default function ProjectDetail() {
+  const { t } = useI18n();
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(null);
@@ -38,7 +40,7 @@ export default function ProjectDetail() {
       const res = await api.getProject(id);
       setProject(res.data);
     } catch {
-      toast.error("Failed to load project");
+      toast.error(t("pd.loadError"));
       navigate("/");
     } finally {
       setLoading(false);
@@ -53,11 +55,11 @@ export default function ProjectDetail() {
       const res = await api.validateProject(id);
       setProject(prev => ({ ...prev, validation_results: res.data.findings, status: res.data.status }));
       const s = res.data.summary;
-      if (s.errors > 0) toast.error(`Validation: ${s.errors} error(s), ${s.warnings} warning(s)`);
-      else if (s.warnings > 0) toast.warning(`Validation passed with ${s.warnings} warning(s)`);
-      else toast.success("Validation passed. Ready to generate.");
+      if (s.errors > 0) toast.error(t("pd.validation.errwarn", { errors: s.errors, warnings: s.warnings }));
+      else if (s.warnings > 0) toast.warning(t("pd.validation.warnOnly", { warnings: s.warnings }));
+      else toast.success(t("pd.validation.passed"));
     } catch (e) {
-      toast.error("Validation failed: " + (e.response?.data?.detail || e.message));
+      toast.error(t("pd.validation.fail", { detail: e.response?.data?.detail || e.message }));
     } finally {
       setValidating(false);
     }
@@ -73,10 +75,10 @@ export default function ProjectDetail() {
       } else {
         setProject(prev => ({ ...prev, generated_config: res.data.config, status: "generated", validation_results: res.data.findings }));
         setTab("clean");
-        toast.success("Configuration generated successfully");
+        toast.success(t("pd.generate.success"));
       }
     } catch (e) {
-      toast.error("Generation failed: " + (e.response?.data?.detail || e.message));
+      toast.error(t("pd.generate.fail", { detail: e.response?.data?.detail || e.message }));
     } finally {
       setGenerating(false);
     }
@@ -93,30 +95,52 @@ export default function ProjectDetail() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success(`Exported as ${format.toUpperCase()}`);
+      toast.success(t("pd.export.success", { format: format.toUpperCase() }));
     } catch (e) {
-      toast.error("Export failed: " + (e.response?.data?.detail || e.message));
+      toast.error(t("pd.export.fail", { detail: e.response?.data?.detail || e.message }));
     }
   };
 
   const handleDelete = async () => {
-    if (!window.confirm("Delete this project? This cannot be undone.")) return;
+    if (!window.confirm(t("pd.confirmDelete"))) return;
     try {
       await api.deleteProject(id);
-      toast.success("Project deleted");
+      toast.success(t("pd.deleted"));
       navigate("/");
     } catch (e) {
-      toast.error("Delete failed");
+      toast.error(t("pd.deleteFail"));
     }
   };
 
   const copyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-    toast.success("Copied to clipboard");
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => toast.success(t("pd.copied")))
+        .catch(() => fallbackCopy(text));
+    } else {
+      fallbackCopy(text);
+    }
   };
 
-  if (loading) return <div className="p-6 text-sm text-zinc-500">Loading project...</div>;
-  if (!project) return <div className="p-6 text-sm text-zinc-500">Project not found.</div>;
+  const fallbackCopy = (text) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+      document.execCommand("copy");
+      toast.success(t("pd.copied"));
+    } catch {
+      toast.error(t("pd.copyFail"));
+    }
+    document.body.removeChild(ta);
+  };
+
+  if (loading) return <div className="p-6 text-sm text-zinc-500">{t("pd.loading")}</div>;
+  if (!project) return <div className="p-6 text-sm text-zinc-500">{t("pd.notFound")}</div>;
 
   const config = project.generated_config;
   const findings = project.validation_results || [];
@@ -150,12 +174,13 @@ export default function ProjectDetail() {
 }
 
 function ProjectHeader({ project, navigate, id, onValidate, validating, onGenerate, generating, onDelete }) {
+  const { t } = useI18n();
   return (
     <div className="h-14 border-b border-border flex items-center justify-between px-6 shrink-0">
       <div className="flex items-center gap-3">
-        <h1 className="text-sm font-semibold text-zinc-200">{project.name || "Unnamed Project"}</h1>
+        <h1 className="text-sm font-semibold text-zinc-200">{project.name || t("pd.unnamed")}</h1>
         <Badge className={`text-[10px] px-1.5 py-0 ${statusMap[project.status]?.class || statusMap.draft.class}`}>
-          {statusMap[project.status]?.label || "Draft"}
+          {t(`status.${project.status || "draft"}`)}
         </Badge>
         <span className="text-xs text-zinc-500 font-mono">
           {platformLabels[project.device?.platform_family]} | {project.device?.hostname}
@@ -163,15 +188,15 @@ function ProjectHeader({ project, navigate, id, onValidate, validating, onGenera
       </div>
       <div className="flex gap-2 mr-32 relative z-50">
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => navigate(`/projects/${id}/edit`)} data-testid="edit-project-btn">
-          <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+          <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit")}
         </Button>
         <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onValidate} disabled={validating} data-testid="validate-btn">
           {validating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5 mr-1" />}
-          Validate
+          {t("pd.validate")}
         </Button>
         <Button size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={onGenerate} disabled={generating} data-testid="generate-btn">
           {generating ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1" />}
-          Generate
+          {t("pd.generate")}
         </Button>
         <Button variant="outline" size="sm" className="h-8 text-xs text-red-400 hover:text-red-300 hover:border-red-400/50" onClick={onDelete} data-testid="delete-project-btn">
           <Trash2 className="w-3.5 h-3.5" />
@@ -182,26 +207,27 @@ function ProjectHeader({ project, navigate, id, onValidate, validating, onGenera
 }
 
 function TabBar({ findingsCount }) {
+  const { t } = useI18n();
   return (
     <div className="border-b border-border px-6 pt-2">
       <TabsList className="bg-transparent h-8 p-0 gap-0">
         <TabsTrigger value="clean" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-clean">
-          Clean Config
+          {t("pd.tab.clean")}
         </TabsTrigger>
         <TabsTrigger value="annotated" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-annotated">
-          Annotated
+          {t("pd.tab.annotated")}
         </TabsTrigger>
         <TabsTrigger value="validation" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-validation">
-          Validation {findingsCount > 0 && <span className="ml-1 text-[10px]">({findingsCount})</span>}
+          {t("pd.tab.validation")} {findingsCount > 0 && <span className="ml-1 text-[10px]">({findingsCount})</span>}
         </TabsTrigger>
         <TabsTrigger value="checklist" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-checklist">
-          Checklist
+          {t("pd.tab.checklist")}
         </TabsTrigger>
         <TabsTrigger value="revisions" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-revisions">
-          Revisions
+          {t("pd.tab.revisions")}
         </TabsTrigger>
         <TabsTrigger value="export" className="text-xs h-8 rounded-none border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-400" data-testid="tab-export">
-          Export
+          {t("pd.tab.export")}
         </TabsTrigger>
       </TabsList>
     </div>
@@ -209,31 +235,33 @@ function TabBar({ findingsCount }) {
 }
 
 function CleanConfigTab({ config, copyToClipboard }) {
+  const { t } = useI18n();
   return (
     <TabsContent value="clean" className="flex-1 overflow-hidden m-0">
       {config?.clean_config ? (
         <div className="relative h-full">
           <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.clean_config)} data-testid="copy-clean-config-btn">
-            <Copy className="w-3 h-3 mr-1" /> Copy
+            <Copy className="w-3 h-3 mr-1" /> {t("common.copy")}
           </Button>
           <ScrollArea className="h-full">
             <pre className="config-output m-4 min-h-full" data-testid="clean-config-output">{config.clean_config}</pre>
           </ScrollArea>
         </div>
       ) : (
-        <EmptyState message="No config generated yet. Click 'Generate' to create configuration." />
+        <EmptyState message={t("pd.empty.clean")} />
       )}
     </TabsContent>
   );
 }
 
 function AnnotatedConfigTab({ config, copyToClipboard }) {
+  const { t } = useI18n();
   return (
     <TabsContent value="annotated" className="flex-1 overflow-hidden m-0">
       {config?.annotated_config ? (
         <div className="relative h-full">
           <Button variant="outline" size="sm" className="absolute top-3 right-3 z-10 h-7 text-xs" onClick={() => copyToClipboard(config.annotated_config)} data-testid="copy-annotated-btn">
-            <Copy className="w-3 h-3 mr-1" /> Copy
+            <Copy className="w-3 h-3 mr-1" /> {t("common.copy")}
           </Button>
           <ScrollArea className="h-full">
             <pre className="config-output m-4 min-h-full" data-testid="annotated-config-output">
@@ -246,7 +274,7 @@ function AnnotatedConfigTab({ config, copyToClipboard }) {
           </ScrollArea>
         </div>
       ) : (
-        <EmptyState message="No annotated config available. Generate config first." />
+        <EmptyState message={t("pd.empty.annotated")} />
       )}
     </TabsContent>
   );
@@ -259,18 +287,19 @@ function getAnnotationClass(line) {
 }
 
 function ValidationTab({ findings, errors, warnings, infos }) {
+  const { t } = useI18n();
   return (
     <TabsContent value="validation" className="flex-1 overflow-hidden m-0">
       <ScrollArea className="h-full">
         <div className="p-4 space-y-2" data-testid="validation-results">
           {findings.length === 0 ? (
-            <EmptyState message="No validation results. Click 'Validate' to check your configuration." />
+            <EmptyState message={t("pd.empty.validation")} />
           ) : (
             <>
               <div className="flex gap-3 mb-4 text-xs">
-                <span className="text-red-400">{errors.length} error(s)</span>
-                <span className="text-amber-400">{warnings.length} warning(s)</span>
-                <span className="text-blue-400">{infos.length} info(s)</span>
+                <span className="text-red-400">{t("pd.errCount", { n: errors.length })}</span>
+                <span className="text-amber-400">{t("pd.warnCount", { n: warnings.length })}</span>
+                <span className="text-blue-400">{t("pd.infoCount", { n: infos.length })}</span>
               </div>
               {findings.map((f, i) => (
                 <FindingRow key={`${f.severity}-${f.field}-${i}`} finding={f} />
@@ -284,6 +313,7 @@ function ValidationTab({ findings, errors, warnings, infos }) {
 }
 
 function ChecklistTab({ config }) {
+  const { t } = useI18n();
   return (
     <TabsContent value="checklist" className="flex-1 overflow-hidden m-0">
       <ScrollArea className="h-full">
@@ -305,7 +335,7 @@ function ChecklistTab({ config }) {
               </div>
             ))
           ) : (
-            <EmptyState message="No checklist available. Generate config first." />
+            <EmptyState message={t("pd.empty.checklist")} />
           )}
         </div>
       </ScrollArea>
@@ -314,17 +344,18 @@ function ChecklistTab({ config }) {
 }
 
 function ExportTab({ config, onExport }) {
+  const { t } = useI18n();
   return (
     <TabsContent value="export" className="flex-1 overflow-hidden m-0">
       <div className="p-6 space-y-4" data-testid="export-panel">
-        <h3 className="text-sm font-medium text-zinc-300">Export Project</h3>
+        <h3 className="text-sm font-medium text-zinc-300">{t("pd.export.title")}</h3>
         <div className="grid grid-cols-3 gap-3">
-          <ExportCard icon={FileText} label="Clean Config (TXT)" desc="CLI commands only, ready for paste" format="txt" onClick={onExport} disabled={!config} />
-          <ExportCard icon={FileJson} label="Project (JSON)" desc="Full project data with all settings" format="json" onClick={onExport} />
-          <ExportCard icon={FileCode} label="Project (YAML)" desc="Full project data in YAML format" format="yaml" onClick={onExport} />
+          <ExportCard icon={FileText} label={t("pd.export.txtLabel")} desc={t("pd.export.txtDesc")} format="txt" onClick={onExport} disabled={!config} />
+          <ExportCard icon={FileJson} label={t("pd.export.jsonLabel")} desc={t("pd.export.jsonDesc")} format="json" onClick={onExport} />
+          <ExportCard icon={FileCode} label={t("pd.export.yamlLabel")} desc={t("pd.export.yamlDesc")} format="yaml" onClick={onExport} />
         </div>
         <div className="text-xs text-zinc-600 mt-4">
-          DOCX and PDF export will be available in a future release.
+          {t("pd.export.future")}
         </div>
       </div>
     </TabsContent>
@@ -332,6 +363,7 @@ function ExportTab({ config, onExport }) {
 }
 
 function RevisionsTab({ project }) {
+  const { t } = useI18n();
   const revisions = useMemo(() => {
     const list = (project?.revisions || []).slice();
     list.reverse(); // newest first
@@ -355,12 +387,12 @@ function RevisionsTab({ project }) {
         <div className="w-72 border-r border-border overflow-hidden flex flex-col shrink-0">
           <div className="px-3 py-2 border-b border-border flex items-center gap-2 text-xs text-zinc-400">
             <History className="w-3.5 h-3.5" />
-            <span>{revisions.length} revision(s)</span>
+            <span>{t("pd.rev.count", { n: revisions.length })}</span>
           </div>
           <ScrollArea className="flex-1">
             <div className="p-1.5 space-y-1">
               {revisions.length === 0 && (
-                <div className="text-xs text-zinc-600 p-3">No revisions yet. Updates to this project will be tracked here.</div>
+                <div className="text-xs text-zinc-600 p-3">{t("pd.rev.empty")}</div>
               )}
               {revisions.map((r, i) => (
                 <button
@@ -378,7 +410,7 @@ function RevisionsTab({ project }) {
                     {r.timestamp ? new Date(r.timestamp).toLocaleString() : "—"}
                   </div>
                   <div className="text-[10px] text-zinc-600 mt-0.5 truncate">
-                    {r.snapshot?.name || "Unnamed snapshot"}
+                    {r.snapshot?.name || t("pd.rev.unnamedSnap")}
                   </div>
                 </button>
               ))}
@@ -389,36 +421,36 @@ function RevisionsTab({ project }) {
           <div className="px-4 py-2 border-b border-border flex items-center justify-between text-xs">
             <div className="text-zinc-400">
               {selected ? (
-                <>Comparing <span className="text-amber-400 font-mono">revision {new Date(selected.timestamp).toLocaleString()}</span> → <span className="text-emerald-400 font-mono">current</span></>
+                <>{t("pd.rev.comparing")} <span className="text-amber-400 font-mono">{t("pd.rev.revisionAt", { time: new Date(selected.timestamp).toLocaleString() })}</span> → <span className="text-emerald-400 font-mono">{t("pd.rev.current")}</span></>
               ) : (
-                <>Select a revision on the left to see changes.</>
+                <>{t("pd.rev.selectHint")}</>
               )}
             </div>
             {selected && (
               <div className="flex gap-3 text-[11px]">
-                <span className="text-emerald-400">+{diffRows.filter(r => r.kind === "add").length} added</span>
-                <span className="text-red-400">-{diffRows.filter(r => r.kind === "remove").length} removed</span>
-                <span className="text-amber-400">~{diffRows.filter(r => r.kind === "change").length} changed</span>
+                <span className="text-emerald-400">{t("pd.rev.added", { n: diffRows.filter(r => r.kind === "add").length })}</span>
+                <span className="text-red-400">{t("pd.rev.removed", { n: diffRows.filter(r => r.kind === "remove").length })}</span>
+                <span className="text-amber-400">{t("pd.rev.changed", { n: diffRows.filter(r => r.kind === "change").length })}</span>
               </div>
             )}
           </div>
           <ScrollArea className="flex-1">
             <div className="p-3" data-testid="revision-diff">
               {!selected && (
-                <EmptyState message="No revision selected." />
+                <EmptyState message={t("pd.rev.noSelected")} />
               )}
               {selected && diffRows.length === 0 && (
-                <div className="text-xs text-zinc-500 p-2">No differences detected between this revision and the current project.</div>
+                <div className="text-xs text-zinc-500 p-2">{t("pd.rev.noDiff")}</div>
               )}
               {selected && diffRows.length > 0 && (
                 <div className="border border-border rounded-sm overflow-hidden">
                   <table className="w-full dense-table text-xs">
                     <thead>
                       <tr className="bg-card border-b border-border text-[10px] text-zinc-500 uppercase">
-                        <th className="text-left px-3 py-1.5 w-12">Op</th>
-                        <th className="text-left px-3 py-1.5">Field</th>
-                        <th className="text-left px-3 py-1.5">Previous</th>
-                        <th className="text-left px-3 py-1.5">Current</th>
+                        <th className="text-left px-3 py-1.5 w-12">{t("pd.diff.op")}</th>
+                        <th className="text-left px-3 py-1.5">{t("pd.diff.field")}</th>
+                        <th className="text-left px-3 py-1.5">{t("pd.diff.prev")}</th>
+                        <th className="text-left px-3 py-1.5">{t("pd.diff.current")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -537,6 +569,7 @@ function EmptyState({ message }) {
 }
 
 function ExportCard({ icon: Icon, label, desc, format, onClick, disabled }) {
+  const { t } = useI18n();
   return (
     <button
       className="border border-border rounded-sm p-4 text-left hover:bg-zinc-800/40 btn-transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -549,7 +582,7 @@ function ExportCard({ icon: Icon, label, desc, format, onClick, disabled }) {
       <div className="text-xs text-zinc-500 mt-0.5">{desc}</div>
       <div className="mt-2">
         <span className="inline-flex items-center text-xs text-blue-400">
-          <Download className="w-3 h-3 mr-1" /> Download
+          <Download className="w-3 h-3 mr-1" /> {t("common.download")}
         </span>
       </div>
     </button>

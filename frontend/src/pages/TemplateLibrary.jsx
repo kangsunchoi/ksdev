@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,6 +22,7 @@ const catLabels = {
 };
 
 export default function TemplateLibrary() {
+  const { t: tr } = useI18n();
   const navigate = useNavigate();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export default function TemplateLibrary() {
       const res = await api.listTemplates(params);
       setTemplates(res.data);
     } catch {
-      toast.error("Failed to load templates");
+      toast.error(tr("templates.loadError"));
     } finally {
       setLoading(false);
     }
@@ -44,41 +46,41 @@ export default function TemplateLibrary() {
   const handleDuplicate = async (id) => {
     try {
       await api.duplicateTemplate(id);
-      toast.success("Template duplicated");
+      toast.success(tr("templates.duplicated"));
       fetchTemplates();
     } catch (e) {
-      toast.error("Duplicate failed: " + (e.response?.data?.detail || e.message));
+      toast.error(tr("templates.duplicateFail", { detail: e.response?.data?.detail || e.message }));
     }
   };
 
   const handleToggleLock = async (id) => {
     try {
       const res = await api.toggleTemplateLock(id);
-      toast.success(res.data.locked ? "Template locked" : "Template unlocked");
+      toast.success(res.data.locked ? tr("templates.locked") : tr("templates.unlocked"));
       fetchTemplates();
     } catch (e) {
-      toast.error("Lock toggle failed");
+      toast.error(tr("templates.lockFail"));
     }
   };
 
   const handleDelete = async (id, name) => {
-    if (!window.confirm(`Delete template "${name}"?`)) return;
+    if (!window.confirm(tr("templates.confirmDelete", { name }))) return;
     try {
       await api.deleteTemplate(id);
-      toast.success("Template deleted");
+      toast.success(tr("templates.deleted"));
       fetchTemplates();
     } catch (e) {
-      toast.error("Delete failed: " + (e.response?.data?.detail || e.message));
+      toast.error(tr("templates.deleteFail", { detail: e.response?.data?.detail || e.message }));
     }
   };
 
   const handleCreateProject = async (id) => {
     try {
       const res = await api.createFromTemplate(id);
-      toast.success("Project created from template");
+      toast.success(tr("templates.created"));
       navigate(`/projects/${res.data.id}/edit`);
     } catch (e) {
-      toast.error("Failed to create project from template");
+      toast.error(tr("templates.createFail"));
     }
   };
 
@@ -86,16 +88,16 @@ export default function TemplateLibrary() {
     <div className="p-6 space-y-6" data-testid="template-library">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Template Library</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Reusable configuration templates by platform</p>
+          <h1 className="text-xl font-semibold tracking-tight">{tr("templates.title")}</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{tr("templates.subtitle")}</p>
         </div>
         <div className="flex gap-2 items-center">
           <Select value={filter} onValueChange={setFilter}>
             <SelectTrigger className="w-40 h-8 text-xs" data-testid="filter-platform">
-              <SelectValue placeholder="All Platforms" />
+              <SelectValue placeholder={tr("templates.allPlatforms")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Platforms</SelectItem>
+              <SelectItem value="all">{tr("templates.allPlatforms")}</SelectItem>
               <SelectItem value="ie3300">IE3300</SelectItem>
               <SelectItem value="ie3400">IE3400</SelectItem>
               <SelectItem value="ie9320">IE9320</SelectItem>
@@ -124,16 +126,17 @@ export default function TemplateLibrary() {
 }
 
 function TemplateContent({ loading, templates, onCreateProject, onDuplicate, onToggleLock, onDelete }) {
+  const { t: tr } = useI18n();
   if (loading) {
-    return <div className="text-sm text-zinc-500 py-8">Loading templates...</div>;
+    return <div className="text-sm text-zinc-500 py-8">{tr("templates.loading")}</div>;
   }
 
   if (templates.length === 0) {
     return (
       <div className="text-center py-12 border border-dashed border-border rounded-sm">
         <Server className="w-8 h-8 text-zinc-600 mx-auto mb-3" />
-        <div className="text-sm text-zinc-500">No templates found.</div>
-        <div className="text-xs text-zinc-600 mt-1">Templates are seeded on first load. Try refreshing.</div>
+        <div className="text-sm text-zinc-500">{tr("templates.empty")}</div>
+        <div className="text-xs text-zinc-600 mt-1">{tr("templates.emptyHint")}</div>
       </div>
     );
   }
@@ -155,6 +158,7 @@ function TemplateContent({ loading, templates, onCreateProject, onDuplicate, onT
 }
 
 function TemplateCard({ template: t, onCreateProject, onDuplicate, onToggleLock, onDelete }) {
+  const { t: tr } = useI18n();
   return (
     <div className="border border-border rounded-sm bg-card p-4 space-y-3" data-testid={`template-card-${t.id}`}>
       <div className="flex items-start justify-between">
@@ -188,16 +192,16 @@ function TemplateCard({ template: t, onCreateProject, onDuplicate, onToggleLock,
 
       <div className="flex gap-1.5 pt-1 border-t border-border">
         <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => onCreateProject(t.id)} data-testid={`use-template-${t.id}`}>
-          <FilePlus2 className="w-3 h-3 mr-1" /> Use
+          <FilePlus2 className="w-3 h-3 mr-1" /> {tr("common.use")}
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500" onClick={() => onDuplicate(t.id)} title="Duplicate">
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500" onClick={() => onDuplicate(t.id)} title={tr("common.duplicate")}>
           <Copy className="w-3 h-3" />
         </Button>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500" onClick={() => onToggleLock(t.id)} title={t.locked ? "Unlock" : "Lock"}>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500" onClick={() => onToggleLock(t.id)} title={t.locked ? tr("common.unlock") : tr("common.lock")}>
           {t.locked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
         </Button>
         {!t.locked && (
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400" onClick={() => onDelete(t.id, t.name)} title="Delete">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-zinc-500 hover:text-red-400" onClick={() => onDelete(t.id, t.name)} title={tr("common.delete")}>
             <Trash2 className="w-3 h-3" />
           </Button>
         )}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ const platformLabels = {
 };
 
 export default function Dashboard() {
+  const { t } = useI18n();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,7 +37,7 @@ export default function Dashboard() {
       const res = await api.getStats();
       setStats(res.data);
     } catch (err) {
-      setError(err.message || "Failed to load dashboard data");
+      setError(err.message || t("dashboard.loadError"));
     } finally {
       setLoading(false);
     }
@@ -57,10 +59,10 @@ export default function Dashboard() {
     try {
       const content = await file.text();
       const res = await api.importProject({ format, content });
-      toast.success(`Imported "${res.data.name}"`);
+      toast.success(t("dashboard.import.success", { name: res.data.name }));
       navigate(`/projects/${res.data.id}`);
     } catch (err) {
-      toast.error("Import failed: " + (err.response?.data?.detail || err.message));
+      toast.error(t("dashboard.import.fail", { detail: err.response?.data?.detail || err.message }));
     } finally {
       setImporting(false);
     }
@@ -69,7 +71,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="p-6" data-testid="dashboard-loading">
-        <div className="text-zinc-500 text-sm">Loading dashboard...</div>
+        <div className="text-zinc-500 text-sm">{t("dashboard.loading")}</div>
       </div>
     );
   }
@@ -79,7 +81,7 @@ export default function Dashboard() {
       <div className="p-6" data-testid="dashboard-error">
         <div className="text-red-400 text-sm">{error}</div>
         <Button variant="outline" size="sm" className="h-8 text-xs mt-3" onClick={fetchStats}>
-          <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+          <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> {t("common.retry")}
         </Button>
       </div>
     );
@@ -89,8 +91,8 @@ export default function Dashboard() {
     <div className="p-6 space-y-6" data-testid="dashboard">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-0.5">Configuration project overview</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t("dashboard.title")}</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">{t("dashboard.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           <input
@@ -109,7 +111,7 @@ export default function Dashboard() {
             data-testid="import-project-btn"
             className="h-8 text-xs"
           >
-            <Upload className="w-3.5 h-3.5 mr-1.5" /> {importing ? "Importing..." : "Import"}
+            <Upload className="w-3.5 h-3.5 mr-1.5" /> {importing ? t("common.importing") : t("common.import")}
           </Button>
           <Button
             variant="outline"
@@ -118,7 +120,7 @@ export default function Dashboard() {
             data-testid="refresh-stats-btn"
             className="h-8 text-xs"
           >
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> {t("common.refresh")}
           </Button>
           <Button
             size="sm"
@@ -126,7 +128,7 @@ export default function Dashboard() {
             data-testid="new-project-btn"
             className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
           >
-            <FilePlus2 className="w-3.5 h-3.5 mr-1.5" /> New Config
+            <FilePlus2 className="w-3.5 h-3.5 mr-1.5" /> {t("common.newConfig")}
           </Button>
         </div>
       </div>
@@ -134,23 +136,23 @@ export default function Dashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="stats-grid">
         <StatCard
-          icon={Files} label="Total Projects"
+          icon={Files} label={t("dashboard.stat.total")}
           value={stats?.total_projects ?? 0}
           testId="stat-total-projects"
         />
         <StatCard
-          icon={FileWarning} label="Drafts"
+          icon={FileWarning} label={t("dashboard.stat.drafts")}
           value={stats?.draft_count ?? 0}
           testId="stat-drafts"
         />
         <StatCard
-          icon={FileCheck} label="Generated"
+          icon={FileCheck} label={t("dashboard.stat.generated")}
           value={stats?.generated_count ?? 0}
           color="text-emerald-400"
           testId="stat-generated"
         />
         <StatCard
-          icon={Server} label="Templates"
+          icon={Server} label={t("dashboard.stat.templates")}
           value={stats?.total_templates ?? 0}
           color="text-blue-400"
           testId="stat-templates"
@@ -159,16 +161,16 @@ export default function Dashboard() {
 
       {/* Recent projects */}
       <div>
-        <h2 className="text-sm font-medium text-zinc-300 mb-3">Recent Projects</h2>
+        <h2 className="text-sm font-medium text-zinc-300 mb-3">{t("dashboard.recent")}</h2>
         <div className="border border-border rounded-sm overflow-hidden" data-testid="recent-projects-table">
           <table className="w-full dense-table">
             <thead>
               <tr className="bg-card border-b border-border text-xs text-zinc-500 uppercase tracking-wider">
-                <th className="text-left py-2 px-3">Name</th>
-                <th className="text-left py-2 px-3">Platform</th>
-                <th className="text-left py-2 px-3">Hostname</th>
-                <th className="text-left py-2 px-3">Status</th>
-                <th className="text-right py-2 px-3">Updated</th>
+                <th className="text-left py-2 px-3">{t("dashboard.col.name")}</th>
+                <th className="text-left py-2 px-3">{t("dashboard.col.platform")}</th>
+                <th className="text-left py-2 px-3">{t("dashboard.col.hostname")}</th>
+                <th className="text-left py-2 px-3">{t("dashboard.col.status")}</th>
+                <th className="text-right py-2 px-3">{t("dashboard.col.updated")}</th>
                 <th className="py-2 px-3 w-8"></th>
               </tr>
             </thead>
@@ -176,7 +178,7 @@ export default function Dashboard() {
               {(!stats?.recent_projects || stats.recent_projects.length === 0) ? (
                 <tr>
                   <td colSpan={6} className="text-center py-8 text-sm text-zinc-600">
-                    No projects yet. Create your first configuration.
+                    {t("dashboard.empty")}
                   </td>
                 </tr>
               ) : (
@@ -187,7 +189,7 @@ export default function Dashboard() {
                     onClick={() => navigate(`/projects/${p.id}`)}
                     data-testid={`project-row-${p.id}`}
                   >
-                    <td className="py-2 px-3 text-sm font-medium text-zinc-200">{p.name || "Unnamed"}</td>
+                    <td className="py-2 px-3 text-sm font-medium text-zinc-200">{p.name || t("dashboard.unnamed")}</td>
                     <td className="py-2 px-3">
                       <span className="text-xs text-zinc-400 font-mono">
                         {platformLabels[p.device?.platform_family] || p.device?.platform_family || "—"}
@@ -198,7 +200,7 @@ export default function Dashboard() {
                     </td>
                     <td className="py-2 px-3">
                       <Badge className={`text-[10px] px-1.5 py-0 ${statusColors[p.status] || statusColors.draft}`}>
-                        {p.status || "draft"}
+                        {t(`status.${p.status || "draft"}`)}
                       </Badge>
                     </td>
                     <td className="py-2 px-3 text-right text-xs text-zinc-500">

@@ -434,7 +434,7 @@ function StepDeviceMgmt({ form, upd, F, updateStringArray, addStringToArray, pla
       <div>
         <Label className="text-xs text-zinc-400 mb-1 block">DNS Servers</Label>
         {form.management.dns_servers.map((dns, i) => (
-          <div key={`dns-${dns || "empty"}-${i}`} className="flex gap-2 mb-1.5">
+          <div key={`dns-${i}`} className="flex gap-2 mb-1.5">
             <Input className="ncb-input font-mono flex-1" value={dns} onChange={e => updateStringArray("management.dns_servers", i, e.target.value)} placeholder="10.0.1.10" data-testid={`input-dns-${i}`} />
             {form.management.dns_servers.length > 1 && (
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => {
@@ -785,7 +785,7 @@ function StringServerList({ label, path, servers, upd, updateStringArray, addStr
     <div>
       <Label className="text-xs text-zinc-400 mb-1 block">{label}</Label>
       {servers.map((s, i) => (
-        <div key={`${prefix}-${s || "empty"}-${i}`} className="flex gap-2 mb-1.5">
+        <div key={`${prefix}-${i}`} className="flex gap-2 mb-1.5">
           <Input className="ncb-input font-mono flex-1" value={s} onChange={e => updateStringArray(path, i, e.target.value)} placeholder={placeholder} />
           {servers.length > 1 && (
             <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-zinc-500 hover:text-red-400" onClick={() => {
